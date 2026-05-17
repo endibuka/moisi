@@ -17,20 +17,25 @@ import tempfile
 import requests
 import runpod
 
-SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
-SERVICE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-STEMS_BUCKET = os.environ.get("STEMS_BUCKET", "stems")
-
 MODEL = "htdemucs_ft"
 STEMS = ["vocals", "drums", "bass", "other"]
 
 
-def _upload(path: str, data: bytes) -> None:
+def _config():
+    """Read Supabase config at job time (not import time, so the worker can
+    boot and register even before env vars are applied)."""
+    url = os.environ["SUPABASE_URL"].rstrip("/")
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    bucket = os.environ.get("STEMS_BUCKET", "stems")
+    return url, key, bucket
+
+
+def _upload(supabase_url: str, key: str, bucket: str, path: str, data: bytes) -> None:
     """Upload one stem to the Supabase Storage `stems` bucket (service role)."""
     res = requests.post(
-        f"{SUPABASE_URL}/storage/v1/object/{STEMS_BUCKET}/{path}",
+        f"{supabase_url}/storage/v1/object/{bucket}/{path}",
         headers={
-            "Authorization": f"Bearer {SERVICE_KEY}",
+            "Authorization": f"Bearer {key}",
             "Content-Type": "audio/mpeg",
             "x-upsert": "true",
         },
@@ -45,6 +50,8 @@ def handler(event):
     audio_url = job["audio_url"]
     output_prefix = job["output_prefix"].strip("/")
     job_id = job["job_id"]
+
+    supabase_url, key, bucket = _config()
 
     work = tempfile.mkdtemp()
     src = os.path.join(work, "input")
@@ -70,7 +77,7 @@ def handler(event):
     for stem in STEMS:
         stem_file = track_dir / f"{stem}.mp3"
         storage_path = f"{output_prefix}/{stem}.mp3"
-        _upload(storage_path, stem_file.read_bytes())
+        _upload(supabase_url, key, bucket, storage_path, stem_file.read_bytes())
         stems[stem] = storage_path
 
     return {"job_id": job_id, "stems": stems}
