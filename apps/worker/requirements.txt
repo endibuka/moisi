@@ -1,0 +1,5 @@
+runpod
+demucs
+torchaudio==2.4.1
+lameenc
+requests

@@ -1,0 +1,79 @@
+"use server";
+
+import { startRunpodSeparation } from "@/lib/runpod";
+import { createClient } from "@/lib/supabase/server";
+
+type StartResult = { jobId?: string; error?: string };
+
+/**
+ * Creates a separation job for an already-uploaded file and queues it on
+ * RunPod. `inputPath` is the path in the `uploads` storage bucket
+ * (the browser uploads the file directly before calling this).
+ */
+export async function startSeparation(
+  inputPath: string,
+  originalName: string,
+): Promise<StartResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  // The uploaded file must live in the caller's own folder.
+  if (!inputPath.startsWith(`${user.id}/`)) {
+    return { error: "Invalid upload path." };
+  }
+
+  const { data: job, error: insertError } = await supabase
+    .from("separation_jobs")
+    .insert({
+      user_id: user.id,
+      original_name: originalName,
+      input_path: inputPath,
+    })
+    .select("id")
+    .single();
+  if (insertError || !job) {
+    return { error: "Could not create the separation job." };
+  }
+
+  const fail = async (message: string) => {
+    await supabase
+      .from("separation_jobs")
+      .update({ status: "failed", error: message })
+      .eq("id", job.id);
+    return { error: message };
+  };
+
+  // Signed URL the GPU worker uses to download the original audio.
+  const { data: signed } = await supabase.storage
+    .from("uploads")
+    .createSignedUrl(inputPath, 60 * 60);
+  if (!signed) return fail("Could not prepare the audio file.");
+
+  const appUrl = process.env.APP_URL;
+  const secret = process.env.RUNPOD_WEBHOOK_SECRET;
+  if (!appUrl || !secret) return fail("Server is not configured.");
+
+  try {
+    const runpodId = await startRunpodSeparation(
+      {
+        audio_url: signed.signedUrl,
+        output_prefix: `${user.id}/${job.id}`,
+        job_id: job.id,
+      },
+      `${appUrl}/api/runpod/webhook?token=${secret}`,
+    );
+
+    await supabase
+      .from("separation_jobs")
+      .update({ status: "processing", runpod_id: runpodId })
+      .eq("id", job.id);
+
+    return { jobId: job.id };
+  } catch (err) {
+    console.error("RunPod start failed:", err);
+    return fail("Could not start the GPU separation job.");
+  }
+}
