@@ -15,6 +15,47 @@ function fmt(t: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/** Gradient track + circular knob slider, styled after the marketing site. */
+function Slider({
+  value,
+  max,
+  step,
+  onChange,
+  ariaLabel,
+}: {
+  value: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+  ariaLabel: string;
+}) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div className="relative h-1 flex-1 rounded-[2px] bg-[rgba(252,252,253,0.1)]">
+      <div
+        className="absolute left-0 top-0 h-1 rounded-[2px] bg-gradient-to-r from-[#00dae8] to-[#0affa7]"
+        style={{ width: `${pct}%` }}
+      />
+      <div
+        className="pointer-events-none absolute top-1/2 flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#545454] bg-black"
+        style={{ left: `${pct}%` }}
+      >
+        <div className="size-1.5 rounded-full bg-[#0affa7]" />
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={max || 0}
+        step={step}
+        value={value}
+        aria-label={ariaLabel}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="absolute left-0 top-1/2 h-7 w-full -translate-y-1/2 cursor-pointer appearance-none bg-transparent opacity-0"
+      />
+    </div>
+  );
+}
+
 export default function StemMixer({
   stems,
 }: {
@@ -32,6 +73,8 @@ export default function StemMixer({
     bass: 1,
     other: 1,
   });
+  const [muted, setMuted] = useState<Set<StemName>>(new Set());
+  const [solo, setSolo] = useState<StemName | null>(null);
 
   // Sign each stem's storage path for playback.
   useEffect(() => {
@@ -54,6 +97,16 @@ export default function StemMixer({
     };
   }, [stems, supabase]);
 
+  // Push volume / mute / solo state onto the audio elements.
+  useEffect(() => {
+    for (const name of STEM_NAMES) {
+      const el = audioRefs.current[name];
+      if (!el) continue;
+      const silenced = muted.has(name) || (solo !== null && solo !== name);
+      el.volume = silenced ? 0 : volumes[name];
+    }
+  }, [volumes, muted, solo, urls]);
+
   const forEachAudio = (fn: (el: HTMLAudioElement) => void) => {
     for (const el of Object.values(audioRefs.current)) if (el) fn(el);
   };
@@ -75,10 +128,17 @@ export default function StemMixer({
     setProgress(t);
   };
 
-  const setVolume = (name: StemName, value: number) => {
-    setVolumes((v) => ({ ...v, [name]: value }));
-    const el = audioRefs.current[name];
-    if (el) el.volume = value;
+  const toggleMute = (name: StemName) => {
+    setMuted((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleSolo = (name: StemName) => {
+    setSolo((prev) => (prev === name ? null : name));
   };
 
   if (!urls) {
@@ -91,92 +151,117 @@ export default function StemMixer({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* transport */}
-      <div className="flex items-center gap-3">
+      {/* player bar */}
+      <div className="flex h-[88px] items-center gap-5 rounded-[20px] border border-[rgba(252,252,253,0.1)] px-5">
         <button
           type="button"
           onClick={toggle}
-          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#00dae8] text-[#001316] transition-opacity hover:opacity-90"
           aria-label={playing ? "Pause" : "Play"}
+          className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white text-black transition-opacity hover:opacity-90"
         >
           {playing ? (
-            <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="size-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
             </svg>
           ) : (
-            <svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="ml-0.5 size-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5v14l11-7L8 5Z" />
             </svg>
           )}
         </button>
-        <span className="w-10 text-[12px] tabular-nums text-[rgba(241,247,254,0.71)]">
+        <span className="w-9 text-[12px] tabular-nums text-[rgba(241,247,254,0.71)]">
           {fmt(progress)}
         </span>
-        <input
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={0.1}
+        <Slider
           value={progress}
-          onChange={(e) => seek(Number(e.target.value))}
-          className="h-1 flex-1 cursor-pointer accent-[#00dae8]"
+          max={duration}
+          step={0.1}
+          onChange={seek}
+          ariaLabel="Seek"
         />
-        <span className="w-10 text-[12px] tabular-nums text-[rgba(241,247,254,0.71)]">
+        <span className="w-9 text-right text-[12px] tabular-nums text-[rgba(241,247,254,0.71)]">
           {fmt(duration)}
         </span>
       </div>
 
-      {/* per-stem volume */}
-      <div className="flex flex-col gap-2.5">
-        {STEM_NAMES.map((name, i) => (
-          <div key={name} className="flex items-center gap-3">
-            <span className="w-16 text-[13px] text-[rgba(252,253,255,0.94)]">
-              {STEM_LABELS[name]}
-            </span>
-            <button
-              type="button"
-              onClick={() => setVolume(name, volumes[name] > 0 ? 0 : 1)}
-              className="text-[12px] text-[rgba(241,247,254,0.71)] transition-colors hover:text-white"
+      {/* stem rows */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {STEM_NAMES.map((name, i) => {
+          const isMuted = muted.has(name);
+          const isSolo = solo === name;
+          return (
+            <div
+              key={name}
+              className="flex h-[72px] items-center gap-2 rounded-[16px] border border-[rgba(252,252,253,0.03)] bg-[rgba(252,252,253,0.05)] px-4"
             >
-              {volumes[name] > 0 ? "Mute" : "Unmute"}
-            </button>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={volumes[name]}
-              onChange={(e) => setVolume(name, Number(e.target.value))}
-              className="h-1 flex-1 cursor-pointer accent-[#00dae8]"
-            />
-            {/* the first stem drives the shared timeline */}
-            <audio
-              ref={(el) => {
-                audioRefs.current[name] = el;
-              }}
-              src={urls[name]}
-              preload="auto"
-              onLoadedMetadata={
-                i === 0
-                  ? (e) => setDuration(e.currentTarget.duration)
-                  : undefined
-              }
-              onTimeUpdate={
-                i === 0
-                  ? (e) => setProgress(e.currentTarget.currentTime)
-                  : undefined
-              }
-              onEnded={
-                i === 0
-                  ? () => {
-                      setPlaying(false);
-                      setProgress(0);
-                    }
-                  : undefined
-              }
-            />
-          </div>
-        ))}
+              <button
+                type="button"
+                onClick={() => toggleMute(name)}
+                aria-label={`Mute ${STEM_LABELS[name]}`}
+                aria-pressed={isMuted}
+                className={`flex size-6 shrink-0 items-center justify-center rounded-[5px] text-[11px] font-semibold transition-colors ${
+                  isMuted
+                    ? "bg-[#ff6b6b] text-[#1a0606]"
+                    : "bg-[rgba(252,252,253,0.1)] text-[rgba(241,247,254,0.71)] hover:text-white"
+                }`}
+              >
+                M
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleSolo(name)}
+                aria-label={`Solo ${STEM_LABELS[name]}`}
+                aria-pressed={isSolo}
+                className={`flex size-6 shrink-0 items-center justify-center rounded-[5px] text-[11px] font-semibold transition-colors ${
+                  isSolo
+                    ? "bg-[#00dae8] text-[#001316]"
+                    : "bg-[rgba(252,252,253,0.1)] text-[rgba(241,247,254,0.71)] hover:text-white"
+                }`}
+              >
+                S
+              </button>
+              <span className="ml-1 w-14 shrink-0 text-[13px] text-[rgba(252,253,255,0.94)]">
+                {STEM_LABELS[name]}
+              </span>
+              <Slider
+                value={volumes[name]}
+                max={1}
+                step={0.01}
+                onChange={(v) =>
+                  setVolumes((prev) => ({ ...prev, [name]: v }))
+                }
+                ariaLabel={`${STEM_LABELS[name]} volume`}
+              />
+
+              {/* the first stem drives the shared timeline */}
+              <audio
+                ref={(el) => {
+                  audioRefs.current[name] = el;
+                }}
+                src={urls[name]}
+                preload="auto"
+                onLoadedMetadata={
+                  i === 0
+                    ? (e) => setDuration(e.currentTarget.duration)
+                    : undefined
+                }
+                onTimeUpdate={
+                  i === 0
+                    ? (e) => setProgress(e.currentTarget.currentTime)
+                    : undefined
+                }
+                onEnded={
+                  i === 0
+                    ? () => {
+                        setPlaying(false);
+                        setProgress(0);
+                      }
+                    : undefined
+                }
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );

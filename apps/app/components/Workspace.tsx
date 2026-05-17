@@ -22,7 +22,9 @@ export default function Workspace({
   const [jobs, setJobs] = useState<SeparationJob[]>(initialJobs);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
 
   // Live job status updates.
   useEffect(() => {
@@ -54,11 +56,7 @@ export default function Workspace({
 
   const pickFile = () => fileInput.current?.click();
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
+  const processFile = async (file: File) => {
     setError(null);
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!ACCEPTED_AUDIO_EXT.includes(ext)) {
@@ -89,55 +87,108 @@ export default function Workspace({
     }
   };
 
-  const hiddenInput = (
-    <input
-      ref={fileInput}
-      type="file"
-      accept={ACCEPTED_AUDIO_EXT.join(",")}
-      onChange={handleFile}
-      className="hidden"
-    />
-  );
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) void processFile(file);
+  };
 
-  if (jobs.length === 0) {
-    return (
-      <div className="h-full">
-        {hiddenInput}
-        <UploadEmptyState onUpload={pickFile} uploading={uploading} />
-        {error && (
-          <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-[13px] text-[#ff6b6b]">
-            {error}
-          </p>
-        )}
-      </div>
-    );
-  }
+  // ---- drag & drop ----
+  const onDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current += 1;
+    if (e.dataTransfer.types.includes("Files")) setDragging(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) setDragging(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    if (uploading) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) void processFile(file);
+  };
 
   return (
-    <div className="mx-auto max-w-[720px] px-6 py-10">
-      {hiddenInput}
+    <div
+      className="relative h-full"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <input
+        ref={fileInput}
+        type="file"
+        accept={ACCEPTED_AUDIO_EXT.join(",")}
+        onChange={handleInput}
+        className="hidden"
+      />
 
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-[22px] text-[rgba(252,253,255,0.94)]">Library</h1>
-        <button
-          type="button"
-          onClick={pickFile}
-          disabled={uploading}
-          className="flex h-9 items-center gap-2 rounded-[8px] bg-[#00dae8] px-4 text-[13px] font-medium text-[#001316] transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {uploading ? "Uploading…" : "Upload song"}
-        </button>
-      </div>
+      {jobs.length === 0 ? (
+        <>
+          <UploadEmptyState onUpload={pickFile} uploading={uploading} />
+          {error && (
+            <p className="absolute bottom-8 left-1/2 -translate-x-1/2 text-[13px] text-[#ff6b6b]">
+              {error}
+            </p>
+          )}
+        </>
+      ) : (
+        <div className="mx-auto max-w-[720px] px-6 py-10">
+          <div className="mb-6 flex items-center justify-between">
+            <h1 className="text-[22px] text-[rgba(252,253,255,0.94)]">
+              Library
+            </h1>
+            <button
+              type="button"
+              onClick={pickFile}
+              disabled={uploading}
+              className="flex h-9 items-center gap-2 rounded-[8px] bg-[#00dae8] px-4 text-[13px] font-medium text-[#001316] transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {uploading ? "Uploading…" : "Upload song"}
+            </button>
+          </div>
 
-      {error && (
-        <p className="mb-4 text-[13px] text-[#ff6b6b]">{error}</p>
+          {error && <p className="mb-4 text-[13px] text-[#ff6b6b]">{error}</p>}
+
+          <div className="flex flex-col gap-3">
+            {jobs.map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </div>
+        </div>
       )}
 
-      <div className="flex flex-col gap-3">
-        {jobs.map((job) => (
-          <JobCard key={job.id} job={job} />
-        ))}
-      </div>
+      {/* drag-and-drop overlay */}
+      {dragging && (
+        <div className="pointer-events-none absolute inset-3 z-10 flex flex-col items-center justify-center gap-2 rounded-[16px] border-2 border-dashed border-[#00dae8] bg-[rgba(0,218,232,0.06)] backdrop-blur-[2px]">
+          <svg
+            className="h-8 w-8 text-[#00dae8]"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 16V4m0 0 4 4m-4-4-4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+          </svg>
+          <p className="text-[15px] font-medium text-[#edeef0]">
+            Drop your song to separate it
+          </p>
+          <p className="text-[12px] text-[rgba(241,247,254,0.71)]">
+            {ACCEPTED_AUDIO_EXT.join(", ")} · max 30 MB
+          </p>
+        </div>
+      )}
     </div>
   );
 }

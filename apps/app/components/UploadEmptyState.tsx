@@ -43,6 +43,9 @@ export default function UploadEmptyState({
             )}
             {uploading ? "Uploading…" : "Upload song"}
           </button>
+          <p className="text-[12px] text-[rgba(241,247,254,0.45)]">
+            or drag &amp; drop an audio file anywhere
+          </p>
         </div>
       </div>
     </div>

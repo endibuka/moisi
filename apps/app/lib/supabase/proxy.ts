@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
   "/forgot-password",
   "/reset-password",
   "/auth",
+  "/api", // API routes handle their own auth (e.g. the RunPod webhook token)
 ];
 
 const isPublic = (pathname: string) =>
