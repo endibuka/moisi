@@ -8,11 +8,11 @@ export type SeparationInput = {
 
 /**
  * Queues a separation job on the RunPod serverless endpoint and returns the
- * RunPod job id. RunPod reports completion by POSTing to `webhookUrl`.
+ * RunPod job id. Completion is tracked by the Inngest `watchSeparationJob`
+ * function polling `/status`; we no longer rely on a RunPod webhook.
  */
 export async function startRunpodSeparation(
   input: SeparationInput,
-  webhookUrl: string,
 ): Promise<string> {
   const endpoint = process.env.RUNPOD_ENDPOINT_ID;
   const apiKey = process.env.RUNPOD_API_KEY;
@@ -26,7 +26,7 @@ export async function startRunpodSeparation(
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ input, webhook: webhookUrl }),
+    body: JSON.stringify({ input }),
   });
 
   if (!res.ok) {

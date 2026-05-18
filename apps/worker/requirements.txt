@@ -1,5 +1,5 @@
 runpod
-demucs
-torchaudio==2.4.1
-lameenc
+# audio-separator[gpu] bundles ONNX-GPU, PyTorch, Demucs and the UVR/MDX/Mel-Roformer
+# model loaders behind one Separator API. Replaces the standalone demucs CLI.
+audio-separator[gpu]
 requests

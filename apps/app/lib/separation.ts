@@ -1,5 +1,6 @@
 export type StemName =
   | "vocals"
+  | "vocals_acapella"
   | "drums"
   | "bass"
   | "guitar"
@@ -24,6 +25,7 @@ export type SeparationJob = {
 
 export const STEM_NAMES: StemName[] = [
   "vocals",
+  "vocals_acapella",
   "drums",
   "bass",
   "guitar",
@@ -33,6 +35,7 @@ export const STEM_NAMES: StemName[] = [
 
 export const STEM_LABELS: Record<StemName, string> = {
   vocals: "Vocals",
+  vocals_acapella: "Studio Acapella",
   drums: "Drums",
   bass: "Bass",
   guitar: "Guitar",

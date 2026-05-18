@@ -1,7 +1,8 @@
-# RunPod serverless worker: Demucs (htdemucs_6s) 6-stem separation.
+# RunPod serverless worker: SOTA vocal pipeline (Mel-Roformer + htdemucs_6s
+# + MDX23C-InstVoc + UVR-DeEcho-DeReverb).
 FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 
-# ffmpeg is needed to decode mp3/m4a/etc.
+# ffmpeg is needed to decode mp3/m4a/etc. and to encode the MP3 outputs.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg \
   && rm -rf /var/lib/apt/lists/*
@@ -11,8 +12,16 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Bake the model weights into the image so cold starts don't re-download them.
-RUN python -c "from demucs.pretrained import get_model; get_model('htdemucs_6s')"
+# Pre-download every model weight into /app/models so cold starts don't
+# fetch them from HuggingFace. ~2-3 GB total, in addition to ~3 GB of deps.
+RUN python -c "\
+from audio_separator.separator import Separator;\
+s = Separator(model_file_dir='/app/models');\
+s.download_model_files('vocals_mel_band_roformer.ckpt');\
+s.download_model_files('htdemucs_6s.yaml');\
+s.download_model_files('MDX23C-InstVoc HQ.ckpt');\
+s.download_model_files('UVR-DeEcho-DeReverb.pth');\
+"
 
 COPY handler.py .
 

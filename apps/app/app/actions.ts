@@ -2,6 +2,7 @@
 
 import { startRunpodSeparation } from "@/lib/runpod";
 import { createClient } from "@/lib/supabase/server";
+import { inngest } from "@/lib/inngest/client";
 
 type StartResult = { jobId?: string; error?: string };
 
@@ -52,19 +53,12 @@ export async function startSeparation(
     .createSignedUrl(inputPath, 60 * 60);
   if (!signed) return fail("Could not prepare the audio file.");
 
-  const appUrl = process.env.APP_URL;
-  const secret = process.env.RUNPOD_WEBHOOK_SECRET;
-  if (!appUrl || !secret) return fail("Server is not configured.");
-
   try {
-    const runpodId = await startRunpodSeparation(
-      {
-        audio_url: signed.signedUrl,
-        output_prefix: `${user.id}/${job.id}`,
-        job_id: job.id,
-      },
-      `${appUrl}/api/runpod/webhook?token=${secret}`,
-    );
+    const runpodId = await startRunpodSeparation({
+      audio_url: signed.signedUrl,
+      output_prefix: `${user.id}/${job.id}`,
+      job_id: job.id,
+    });
 
     await supabase
       .from("separation_jobs")
@@ -74,6 +68,14 @@ export async function startSeparation(
         updated_at: new Date().toISOString(),
       })
       .eq("id", job.id);
+
+    // Kick off the per-job watcher. Inngest will poll RunPod until the job
+    // reaches a terminal state and write the row; the webhook is now a
+    // best-effort fast path, not the single point of failure.
+    await inngest.send({
+      name: "app/separation.queued",
+      data: { jobId: job.id, runpodId },
+    });
 
     return { jobId: job.id };
   } catch (err) {
