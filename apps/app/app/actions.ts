@@ -68,7 +68,11 @@ export async function startSeparation(
 
     await supabase
       .from("separation_jobs")
-      .update({ status: "processing", runpod_id: runpodId })
+      .update({
+        status: "processing",
+        runpod_id: runpodId,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", job.id);
 
     return { jobId: job.id };

@@ -37,3 +37,38 @@ export async function startRunpodSeparation(
   if (!data.id) throw new Error("RunPod /run returned no job id.");
   return data.id;
 }
+
+export type RunpodStatus =
+  | "IN_QUEUE"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED"
+  | "TIMED_OUT";
+
+export type RunpodStatusResponse = {
+  id: string;
+  status: RunpodStatus;
+  output?: { job_id?: string; stems?: Record<string, string> } | null;
+  error?: string;
+};
+
+/** Poll RunPod for the live status of a previously-queued job. */
+export async function getRunpodJobStatus(
+  runpodId: string,
+): Promise<RunpodStatusResponse> {
+  const endpoint = process.env.RUNPOD_ENDPOINT_ID;
+  const apiKey = process.env.RUNPOD_API_KEY;
+  if (!endpoint || !apiKey) {
+    throw new Error("RunPod env vars are not configured.");
+  }
+
+  const res = await fetch(`${RUNPOD_BASE}/${endpoint}/status/${runpodId}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`RunPod /status failed: ${res.status} ${await res.text()}`);
+  }
+  return (await res.json()) as RunpodStatusResponse;
+}
