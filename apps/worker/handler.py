@@ -1,4 +1,4 @@
-"""RunPod serverless handler: split a song into 4 stems with Demucs.
+"""RunPod serverless handler: split a song into 6 stems with Demucs htdemucs_6s.
 
 Input (event["input"]):
     audio_url      signed URL to download the original audio
@@ -6,7 +6,7 @@ Input (event["input"]):
     job_id         our separation_jobs row id (echoed back for the webhook)
 
 Returns:
-    { "job_id": ..., "stems": { "vocals": path, "drums": ..., "bass": ..., "other": ... } }
+    { "job_id": ..., "stems": { vocals, drums, bass, guitar, piano, other } }
 """
 
 import os
@@ -17,8 +17,8 @@ import tempfile
 import requests
 import runpod
 
-MODEL = "htdemucs_ft"
-STEMS = ["vocals", "drums", "bass", "other"]
+MODEL = "htdemucs_6s"
+STEMS = ["vocals", "drums", "bass", "guitar", "piano", "other"]
 
 
 def _config():

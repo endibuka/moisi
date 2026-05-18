@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
     // Persist Turbopack's work to .next between dev sessions for faster boots.
     turbopackFileSystemCacheForDev: true,
   },
+  // Cloudflare tunnel host that proxies to this dev server (used so RunPod
+  // can reach the webhook locally). Required for HMR cross-origin requests.
+  allowedDevOrigins: ["web.endibuka-webhook.work"],
 };
 
 export default nextConfig;

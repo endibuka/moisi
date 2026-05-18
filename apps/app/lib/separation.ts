@@ -1,23 +1,42 @@
-export type StemName = "vocals" | "drums" | "bass" | "other";
+export type StemName =
+  | "vocals"
+  | "drums"
+  | "bass"
+  | "guitar"
+  | "piano"
+  | "other";
 
 export type JobStatus = "pending" | "processing" | "completed" | "failed";
+
+// Jobs run before the 6-stem rollout only have {vocals, drums, bass, other},
+// so consumers must tolerate missing keys.
+export type StemPaths = Partial<Record<StemName, string>>;
 
 export type SeparationJob = {
   id: string;
   status: JobStatus;
   original_name: string;
   input_path: string;
-  stems: Record<StemName, string> | null;
+  stems: StemPaths | null;
   error: string | null;
   created_at: string;
 };
 
-export const STEM_NAMES: StemName[] = ["vocals", "drums", "bass", "other"];
+export const STEM_NAMES: StemName[] = [
+  "vocals",
+  "drums",
+  "bass",
+  "guitar",
+  "piano",
+  "other",
+];
 
 export const STEM_LABELS: Record<StemName, string> = {
   vocals: "Vocals",
   drums: "Drums",
   bass: "Bass",
+  guitar: "Guitar",
+  piano: "Piano",
   other: "Other",
 };
 

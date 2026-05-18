@@ -5,6 +5,7 @@ import {
   STEM_LABELS,
   STEM_NAMES,
   type StemName,
+  type StemPaths,
 } from "@/lib/separation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -56,23 +57,27 @@ function Slider({
   );
 }
 
-export default function StemMixer({
-  stems,
-}: {
-  stems: Record<StemName, string>;
-}) {
+export default function StemMixer({ stems }: { stems: StemPaths }) {
   const supabase = useMemo(() => createClient(), []);
-  const [urls, setUrls] = useState<Record<StemName, string> | null>(null);
-  const audioRefs = useRef<Partial<Record<StemName, HTMLAudioElement | null>>>({});
+
+  // Only render the stems this row actually has — older jobs are 4-stem.
+  const availableStems = useMemo(
+    () => STEM_NAMES.filter((name) => Boolean(stems[name])),
+    [stems],
+  );
+
+  const [urls, setUrls] = useState<Partial<Record<StemName, string>> | null>(
+    null,
+  );
+  const audioRefs = useRef<Partial<Record<StemName, HTMLAudioElement | null>>>(
+    {},
+  );
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volumes, setVolumes] = useState<Record<StemName, number>>({
-    vocals: 1,
-    drums: 1,
-    bass: 1,
-    other: 1,
-  });
+  const [volumes, setVolumes] = useState<Partial<Record<StemName, number>>>(
+    () => Object.fromEntries(availableStems.map((n) => [n, 1])),
+  );
   const [muted, setMuted] = useState<Set<StemName>>(new Set());
   const [solo, setSolo] = useState<StemName | null>(null);
 
@@ -81,31 +86,31 @@ export default function StemMixer({
     let active = true;
     (async () => {
       const entries = await Promise.all(
-        STEM_NAMES.map(async (name) => {
+        availableStems.map(async (name) => {
+          const path = stems[name];
+          if (!path) return [name, ""] as const;
           const { data } = await supabase.storage
             .from("stems")
-            .createSignedUrl(stems[name], 3600);
+            .createSignedUrl(path, 3600);
           return [name, data?.signedUrl ?? ""] as const;
         }),
       );
-      if (active) {
-        setUrls(Object.fromEntries(entries) as Record<StemName, string>);
-      }
+      if (active) setUrls(Object.fromEntries(entries));
     })();
     return () => {
       active = false;
     };
-  }, [stems, supabase]);
+  }, [stems, supabase, availableStems]);
 
   // Push volume / mute / solo state onto the audio elements.
   useEffect(() => {
-    for (const name of STEM_NAMES) {
+    for (const name of availableStems) {
       const el = audioRefs.current[name];
       if (!el) continue;
       const silenced = muted.has(name) || (solo !== null && solo !== name);
-      el.volume = silenced ? 0 : volumes[name];
+      el.volume = silenced ? 0 : volumes[name] ?? 1;
     }
-  }, [volumes, muted, solo, urls]);
+  }, [volumes, muted, solo, urls, availableStems]);
 
   const forEachAudio = (fn: (el: HTMLAudioElement) => void) => {
     for (const el of Object.values(audioRefs.current)) if (el) fn(el);
@@ -186,7 +191,7 @@ export default function StemMixer({
 
       {/* stem rows */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {STEM_NAMES.map((name, i) => {
+        {availableStems.map((name, i) => {
           const isMuted = muted.has(name);
           const isSolo = solo === name;
           return (
@@ -224,7 +229,7 @@ export default function StemMixer({
                 {STEM_LABELS[name]}
               </span>
               <Slider
-                value={volumes[name]}
+                value={volumes[name] ?? 1}
                 max={1}
                 step={0.01}
                 onChange={(v) =>
@@ -238,7 +243,7 @@ export default function StemMixer({
                 ref={(el) => {
                   audioRefs.current[name] = el;
                 }}
-                src={urls[name]}
+                src={urls?.[name] ?? ""}
                 preload="auto"
                 onLoadedMetadata={
                   i === 0
