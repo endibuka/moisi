@@ -1,33 +1,63 @@
 import { inngest } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getRunpodJobStatus, type RunpodStatusResponse } from "@/lib/runpod";
+import {
+  endpointKindForJobType,
+  getRunpodJobStatus,
+  type RunpodEndpointKind,
+  type RunpodStatusResponse,
+  type TrackAnalysis,
+} from "@/lib/runpod";
 
-// Watcher polls RunPod every ~20s for ~15 min; if no terminal status arrives
-// in that window the row is force-failed (worker is dead / RunPod lost it).
-// 15 min covers the 3-stage pipeline (Mel-Roformer + Demucs + MDX23C + DeEcho)
-// for typical 3-5 min songs with comfortable headroom on RunPod's 900s limit.
+// Watcher polls RunPod every ~20s; budget per kind:
+//   separation  — 15 min (3-stage Mel-Roformer + Demucs + MDX23C + DeEcho on
+//                 a typical 3-5 min song; RunPod hard-limits worker runtime
+//                 at 900s anyway).
+//   music_gen   — 25 min (YuE cold start pulls a ~30 GB image and loads a
+//                 7B + 1B LM pair on first job; 6-segment songs push 8-12 min
+//                 of pure inference on top).
 const POLL_INTERVAL = "20s";
-const MAX_POLLS = 45;
-const STALE_MS = 15 * 60 * 1000;
+const MAX_POLLS_BY_KIND: Record<RunpodEndpointKind, number> = {
+  separation: 45,
+  music_gen: 75,
+};
+const STALE_MS_BY_KIND: Record<RunpodEndpointKind, number> = {
+  separation: 15 * 60 * 1000,
+  music_gen: 25 * 60 * 1000,
+};
 
 const nowIso = () => new Date().toISOString();
 
 type TerminalUpdate =
-  | { kind: "completed"; stems: Record<string, string> }
+  | {
+      kind: "completed";
+      stems: Record<string, string>;
+      analysis?: TrackAnalysis;
+    }
   | { kind: "failed"; error: string };
 
 async function writeTerminal(jobId: string, update: TerminalUpdate) {
   const admin = createAdminClient();
   const payload =
     update.kind === "completed"
-      ? { status: "completed" as const, stems: update.stems, updated_at: nowIso() }
+      ? {
+          status: "completed" as const,
+          stems: update.stems,
+          // Worker may omit analysis on librosa failure — only set the column
+          // when we actually have data, never blow away an existing value.
+          ...(update.analysis ? { analysis: update.analysis } : {}),
+          updated_at: nowIso(),
+        }
       : { status: "failed" as const, error: update.error, updated_at: nowIso() };
   await admin.from("separation_jobs").update(payload).eq("id", jobId);
 }
 
 function terminalFromStatus(live: RunpodStatusResponse): TerminalUpdate | null {
   if (live.status === "COMPLETED" && live.output?.stems) {
-    return { kind: "completed", stems: live.output.stems };
+    return {
+      kind: "completed",
+      stems: live.output.stems,
+      analysis: live.output.analysis,
+    };
   }
   if (
     live.status === "FAILED" ||
@@ -62,12 +92,14 @@ export const watchSeparationJob = inngest.createFunction(
   { event: "app/separation.queued" },
   async ({ event, step }) => {
     const { jobId, runpodId } = event.data;
+    const endpointKind: RunpodEndpointKind = event.data.endpointKind ?? "separation";
+    const maxPolls = MAX_POLLS_BY_KIND[endpointKind];
 
-    for (let i = 0; i < MAX_POLLS; i++) {
+    for (let i = 0; i < maxPolls; i++) {
       await step.sleep(`wait-${i}`, i === 0 ? "10s" : POLL_INTERVAL);
 
       const live = await step.run(`status-${i}`, () =>
-        getRunpodJobStatus(runpodId),
+        getRunpodJobStatus(runpodId, endpointKind),
       );
 
       const terminal = terminalFromStatus(live);
@@ -77,14 +109,14 @@ export const watchSeparationJob = inngest.createFunction(
       }
     }
 
-    // No terminal status in ~10 minutes — give up.
+    const budgetMin = Math.round((maxPolls * 20) / 60);
     await step.run("write-timeout", () =>
       writeTerminal(jobId, {
         kind: "failed",
-        error: "Watcher exceeded 10-minute cutoff with no terminal RunPod status.",
+        error: `Watcher exceeded ${budgetMin}-minute cutoff with no terminal RunPod status.`,
       }),
     );
-    return { result: "timeout", attempts: MAX_POLLS };
+    return { result: "timeout", attempts: maxPolls };
   },
 );
 
@@ -92,6 +124,7 @@ type StuckRow = {
   id: string;
   runpod_id: string | null;
   updated_at: string;
+  job_type: string | null;
 };
 
 /**
@@ -104,18 +137,32 @@ export const reconcileStuckJobs = inngest.createFunction(
   { id: "reconcile-stuck-jobs", name: "Reconcile stuck separation jobs" },
   { cron: "*/5 * * * *" },
   async ({ step }) => {
-    const cutoff = new Date(Date.now() - STALE_MS).toISOString();
+    // Pull every in-flight job past the SHORTER of the two budgets, then
+    // filter to each row's own per-kind cutoff below — keeps the SQL simple
+    // while still respecting the longer music-gen budget.
+    const minStaleMs = Math.min(
+      STALE_MS_BY_KIND.separation,
+      STALE_MS_BY_KIND.music_gen,
+    );
+    const cutoff = new Date(Date.now() - minStaleMs).toISOString();
 
-    const stuck = await step.run("fetch-stuck", async () => {
+    const candidates = await step.run("fetch-stuck", async () => {
       const admin = createAdminClient();
       const { data, error } = await admin
         .from("separation_jobs")
-        .select("id, runpod_id, updated_at")
+        .select("id, runpod_id, updated_at, job_type")
         .in("status", ["pending", "processing"])
         .lt("updated_at", cutoff)
         .returns<StuckRow[]>();
       if (error) throw new Error(`fetch stuck failed: ${error.message}`);
       return data ?? [];
+    });
+
+    const now = Date.now();
+    const stuck = candidates.filter((row) => {
+      const kind = endpointKindForJobType(row.job_type);
+      const age = now - new Date(row.updated_at).getTime();
+      return age >= STALE_MS_BY_KIND[kind];
     });
 
     if (stuck.length === 0) return { checked: 0, completed: 0, failed: 0 };
@@ -127,7 +174,10 @@ export const reconcileStuckJobs = inngest.createFunction(
       const live = await step.run(`status-${row.id}`, async () => {
         if (!row.runpod_id) return null;
         try {
-          return await getRunpodJobStatus(row.runpod_id);
+          return await getRunpodJobStatus(
+            row.runpod_id,
+            endpointKindForJobType(row.job_type),
+          );
         } catch {
           return null;
         }
@@ -136,10 +186,13 @@ export const reconcileStuckJobs = inngest.createFunction(
       const update: TerminalUpdate = (() => {
         const terminal = live ? terminalFromStatus(live) : null;
         if (terminal) return terminal;
+        const cutoffMin = Math.round(
+          STALE_MS_BY_KIND[endpointKindForJobType(row.job_type)] / 60000,
+        );
         return {
           kind: "failed",
           error: row.runpod_id
-            ? `Job stalled past ${STALE_MS / 60000}-minute cutoff (RunPod status: ${live?.status ?? "unknown"}).`
+            ? `Job stalled past ${cutoffMin}-minute cutoff (RunPod status: ${live?.status ?? "unknown"}).`
             : "Job never reached the GPU worker (timeout).",
         };
       })();

@@ -18,7 +18,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import MuseMarkdown from "@/components/MuseMarkdown";
+import MuseMarkdown, { CoverArtSkeleton } from "@/components/MuseMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { MuseMessage } from "@/lib/muse/conversations";
 import { useConversation } from "@/lib/muse/hooks";
@@ -794,53 +794,77 @@ function MuseChatInner({
                     </div>
                   </div>
                 ) : (
-                  <div key={m.id} className="flex items-start gap-3">
-                    <span className="mt-[3px] flex size-6 shrink-0 items-center justify-center rounded-full bg-[#00dae8] text-[#001316]">
-                      <Sparkle weight="fill" className="h-3 w-3" />
-                    </span>
-                    <div className="min-w-0 flex-1 space-y-2 pt-[2px] text-[14px] leading-[1.65] text-[rgba(252,252,253,0.92)]">
-                      {(m.toolEvents ?? []).map((ev, i) => (
-                        <div
-                          key={`${ev.name}-${i}`}
-                          className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] ${
-                            ev.status === "error"
-                              ? "border-[rgba(255,107,107,0.3)] bg-[rgba(255,107,107,0.06)] text-[#ff9b9b]"
-                              : "border-[rgba(252,253,255,0.08)] bg-[rgba(252,253,255,0.03)] text-[rgba(241,247,254,0.78)]"
-                          }`}
-                        >
-                          {ev.status === "calling" ? (
-                            <span className="size-3 animate-spin rounded-full border-2 border-[rgba(0,218,232,0.25)] border-t-[#00dae8]" />
-                          ) : ev.status === "error" ? (
-                            <span className="size-1.5 rounded-full bg-[#ff6b6b]" />
-                          ) : (
-                            <span className="size-1.5 rounded-full bg-[#0affa7]" />
+                  (() => {
+                    const events = m.toolEvents ?? [];
+                    // The cover-art skeleton card carries its own status text,
+                    // so suppress the generic `create_cover_art` tool chip while
+                    // it's running and bridge into the rendered CoverArtCard
+                    // once the ```cover fence starts streaming.
+                    const visibleEvents = events.filter(
+                      (ev) => ev.name !== "create_cover_art",
+                    );
+                    const generatingCover =
+                      m.pending &&
+                      events.some(
+                        (ev) =>
+                          ev.name === "create_cover_art" && ev.status !== "error",
+                      ) &&
+                      !m.text.includes("```cover");
+                    return (
+                      <div key={m.id} className="flex items-start gap-3">
+                        <span className="mt-[3px] flex size-6 shrink-0 items-center justify-center rounded-full bg-[#00dae8] text-[#001316]">
+                          <Sparkle weight="fill" className="h-3 w-3" />
+                        </span>
+                        <div className="min-w-0 flex-1 space-y-2 pt-[2px] text-[14px] leading-[1.65] text-[rgba(252,252,253,0.92)]">
+                          {visibleEvents.map((ev, i) => (
+                            <div
+                              key={`${ev.name}-${i}`}
+                              className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] ${
+                                ev.status === "error"
+                                  ? "border-[rgba(255,107,107,0.3)] bg-[rgba(255,107,107,0.06)] text-[#ff9b9b]"
+                                  : "border-[rgba(252,253,255,0.08)] bg-[rgba(252,253,255,0.03)] text-[rgba(241,247,254,0.78)]"
+                              }`}
+                            >
+                              {ev.status === "calling" ? (
+                                <span className="size-3 animate-spin rounded-full border-2 border-[rgba(0,218,232,0.25)] border-t-[#00dae8]" />
+                              ) : ev.status === "error" ? (
+                                <span className="size-1.5 rounded-full bg-[#ff6b6b]" />
+                              ) : (
+                                <span className="size-1.5 rounded-full bg-[#0affa7]" />
+                              )}
+                              <span>
+                                {ev.name === "add_track"
+                                  ? ev.status === "calling"
+                                    ? "Adding track…"
+                                    : ev.status === "error"
+                                      ? "Couldn't add track"
+                                      : "Track added"
+                                  : ev.name}
+                              </span>
+                            </div>
+                          ))}
+                          {m.text && (
+                            <MuseMarkdown
+                              text={m.text}
+                              streaming={m.pending}
+                              conversationId={conversationId}
+                              messageId={m.id}
+                              onSend={(msg, opts) => void send(msg, opts)}
+                            />
                           )}
-                          <span>
-                            {ev.name === "add_track"
-                              ? ev.status === "calling"
-                                ? "Adding track…"
-                                : ev.status === "error"
-                                ? "Couldn't add track"
-                                : "Track added"
-                              : ev.name}
-                          </span>
+                          {generatingCover ? (
+                            <CoverArtSkeleton />
+                          ) : !m.text && m.pending ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="size-1.5 animate-pulse rounded-full bg-[rgba(241,247,254,0.6)]" />
+                              <span className="size-1.5 animate-pulse rounded-full bg-[rgba(241,247,254,0.6)] [animation-delay:150ms]" />
+                              <span className="size-1.5 animate-pulse rounded-full bg-[rgba(241,247,254,0.6)] [animation-delay:300ms]" />
+                            </div>
+                          ) : null}
                         </div>
-                      ))}
-                      {m.text ? (
-                        <MuseMarkdown
-                          text={m.text}
-                          streaming={m.pending}
-                          onSend={(msg, opts) => void send(msg, opts)}
-                        />
-                      ) : m.pending ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="size-1.5 animate-pulse rounded-full bg-[rgba(241,247,254,0.6)]" />
-                          <span className="size-1.5 animate-pulse rounded-full bg-[rgba(241,247,254,0.6)] [animation-delay:150ms]" />
-                          <span className="size-1.5 animate-pulse rounded-full bg-[rgba(241,247,254,0.6)] [animation-delay:300ms]" />
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                      </div>
+                    );
+                  })()
                 ),
               )}
             </div>

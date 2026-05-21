@@ -1,0 +1,115 @@
+---
+title: Create a song
+description: Queue a music generation job from a style prompt and optional lyrics.
+api: POST /v1/songs
+---
+
+Queues a music generation job on the YuE engine. Takes a style prompt
+(genre, mood, instrumentation hints) and optional structured lyrics.
+Empty lyrics → instrumental track.
+
+Returns within a few hundred milliseconds with the job id; poll
+[GET /v1/songs/{id}](/endpoints/songs/get) until the audio is ready.
+
+## Request
+
+### Headers
+
+| Name | Required | Value |
+| --- | --- | --- |
+| `Authorization` | yes | `Bearer mk_live_…` |
+| `Content-Type` | yes | `application/json` |
+
+### Body
+
+<ParamField body="genre" type="string" required>
+  Style / genre prompt. 4–500 chars. Describe genre, instrumentation,
+  mood, BPM — the more specific, the better the result. The
+  free-text prompt is what the generator conditions on, not just the
+  genre name.
+</ParamField>
+
+<ParamField body="lyrics" type="string">
+  Optional structured lyrics. Up to 4,000 characters. Use section markers
+  on their own lines: `[Verse 1]`, `[Chorus]`, `[Bridge]`, etc. Blank
+  lines between sections. Plain text only — no markdown, no quotes.
+
+  Omit or pass empty string for an instrumental track.
+</ParamField>
+
+<ParamField body="nSegments" type="number" default="2">
+  Number of ~30 s segments to generate. Clamped to `[1, 6]`. A typical
+  short song is 2–3 segments.
+</ParamField>
+
+<ParamField body="title" type="string">
+  Optional display name shown in your dashboard. Max 80 chars. If
+  omitted, derived from the first non-marker line of the lyrics, or from
+  the first 60 chars of the genre prompt.
+</ParamField>
+
+## Response
+
+`201 Created`. Returns the new job row.
+
+```json
+{
+  "id": "01HF…",
+  "status": "processing",
+  "original_name": "Night drive",
+  "prompt": "indie folk, melancholy female vocal, fingerpicked acoustic guitar, soft brushed drums, 78 bpm",
+  "lyrics": "[Verse 1]\n…your lyric lines here…\n\n[Chorus]\n…",
+  "error": null,
+  "created_at": "2026-05-21T09:00:01.000Z",
+  "updated_at": "2026-05-21T09:00:01.500Z",
+  "duration_seconds": 60,
+  "job_type": "music_generation"
+}
+```
+
+`duration_seconds` is the **estimated** length (`nSegments × 30`). The
+actual generated audio may be slightly different — get the real value
+from [GET /v1/songs/{id}](/endpoints/songs/get) once the job completes.
+
+## Examples
+
+### Instrumental
+
+```bash
+curl https://app.moisi.app/api/v1/songs \
+  -H "Authorization: Bearer mk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "genre": "lo-fi hip-hop, dusty drums, jazz piano samples, rainy night, 75 bpm",
+    "nSegments": 2,
+    "title": "Late night study"
+  }'
+```
+
+### With lyrics
+
+```bash
+curl https://app.moisi.app/api/v1/songs \
+  -H "Authorization: Bearer mk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "genre": "indie folk, melancholy female vocal, fingerpicked acoustic guitar, soft brushed drums, 78 bpm",
+    "lyrics": "[Verse 1]\n…your lyric lines here…\n\n[Chorus]\n…\n",
+    "nSegments": 3,
+    "title": "Night drive"
+  }'
+```
+
+<Tip>
+  Write your own lyrics from scratch and pass them in the `lyrics`
+  field. Generating audio from third-party copyrighted lyrics isn't
+  permitted — see the [Acceptable use policy](https://app.moisi.app/legal).
+</Tip>
+
+## Errors
+
+| Code | When |
+| --- | --- |
+| `missing_api_key` / `invalid_api_key` / `revoked_api_key` | Auth header missing / malformed / revoked. |
+| `invalid_request` | `genre` missing or out of range (4–500 chars), `lyrics` over 4,000 chars, or `nSegments` not a number. |
+| `internal_error` | Queue / worker error. Safe to retry. |

@@ -112,7 +112,7 @@ export async function startSeparation(
     // best-effort fast path, not the single point of failure.
     await inngest.send({
       name: "app/separation.queued",
-      data: { jobId: job.id, runpodId },
+      data: { jobId: job.id, runpodId, endpointKind: "separation" },
     });
 
     return { jobId: job.id };

@@ -34,6 +34,18 @@
               "endpoints/separations/get",
               "endpoints/separations/list"
             ]
+          },
+          {
+            "group": "Songs (music generation)",
+            "pages": [
+              "endpoints/songs/create",
+              "endpoints/songs/get",
+              "endpoints/songs/list"
+            ]
+          },
+          {
+            "group": "Cover art",
+            "pages": ["endpoints/cover-art/create"]
           }
         ]
       }

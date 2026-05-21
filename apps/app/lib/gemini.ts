@@ -6,6 +6,7 @@
  */
 
 const MODEL = "gemini-2.5-flash-image";
+const TEXT_MODEL = "gemini-flash-latest";
 
 type Part =
   | { text: string }
@@ -63,6 +64,51 @@ function base64ToBytes(b64: string): Uint8Array {
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
   return out;
+}
+
+type TextResponse = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  error?: { message?: string };
+};
+
+/**
+ * One-shot text generation. Returns the concatenated text from the first
+ * candidate. Use for short, single-turn calls — for multi-turn chat or
+ * function calling, go through the ADK agent instead.
+ */
+export async function generateText(prompt: string): Promise<string> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    throw new Error("GEMINI_API_KEY is not configured on the server.");
+  }
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODEL}:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Gemini API ${res.status}: ${text}`);
+  }
+  const json = (await res.json()) as TextResponse;
+  if (json.error) {
+    throw new Error(`Gemini API error: ${json.error.message ?? "unknown"}`);
+  }
+
+  const parts = json.candidates?.[0]?.content?.parts ?? [];
+  const text = parts
+    .map((p) => p.text ?? "")
+    .join("")
+    .trim();
+  if (!text) throw new Error("Gemini returned no text.");
+  return text;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { Inngest } from "inngest";
+import type { RunpodEndpointKind } from "@/lib/runpod";
 
 /**
  * Inngest client for app/server-side event sending and function definitions.
@@ -18,6 +19,13 @@ export type AppEvents = {
     data: {
       jobId: string;
       runpodId: string;
+      /**
+       * Which RunPod endpoint this job lives on — set by the producer so the
+       * watcher polls the right /status URL. Optional for backwards-compat
+       * with already-queued events; the watcher defaults to "separation"
+       * when missing, which is what every existing in-flight event needs.
+       */
+      endpointKind?: RunpodEndpointKind;
     };
   };
 };

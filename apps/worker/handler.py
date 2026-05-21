@@ -25,7 +25,10 @@ import os
 import pathlib
 import shutil
 import tempfile
+import traceback
 
+import numpy as np
+import librosa
 import requests
 from audio_separator.separator import Separator
 import runpod
@@ -41,6 +44,76 @@ MODEL_DIR = "/app/models"
 # Stem sets per job_type. The app reads these via lib/separation.ts.
 FULL_STEMS = ("vocals", "vocals_acapella", "drums", "bass", "guitar", "piano", "other")
 VOCAL_ISOLATION_STEMS = ("vocals", "instrumental")
+
+# Cap the analysis input at 2 minutes. BPM and key are stationary enough that
+# more audio doesn't help; capping keeps librosa under ~5s even on long tracks.
+ANALYSIS_MAX_DURATION = 120
+
+# Krumhansl–Kessler key profiles. Correlation against rotated chroma gives a
+# decent tonic + mode estimate without pulling in a heavier key-detection lib.
+_KEY_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+_MAJOR_PROFILE = np.array(
+    [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+)
+_MINOR_PROFILE = np.array(
+    [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+)
+
+
+def _analyze_audio(path: str) -> dict | None:
+    """Run librosa over the input audio and return BPM/key/loudness/brightness.
+
+    Returns None (and logs) if analysis fails — failing the whole separation
+    over a non-critical feature would be a bad trade.
+    """
+    try:
+        y, sr = librosa.load(
+            path, sr=None, mono=True, duration=ANALYSIS_MAX_DURATION
+        )
+        if y.size == 0:
+            return None
+
+        duration = float(librosa.get_duration(y=y, sr=sr))
+
+        # BPM (tempo). librosa.beat.beat_track can return a 0-d array.
+        tempo_arr, _ = librosa.beat.beat_track(y=y, sr=sr)
+        tempo = float(np.asarray(tempo_arr).mean()) if tempo_arr is not None else 0.0
+        bpm = int(round(tempo)) if tempo > 0 else None
+
+        # Key + mode via chroma correlation with Krumhansl–Kessler profiles.
+        chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+        chroma_mean = chroma.mean(axis=1)
+        best = (-2.0, "C", "major")
+        for i in range(12):
+            for profile, mode in (
+                (_MAJOR_PROFILE, "major"),
+                (_MINOR_PROFILE, "minor"),
+            ):
+                rotated = np.roll(profile, i)
+                if chroma_mean.std() == 0 or rotated.std() == 0:
+                    continue
+                corr = float(np.corrcoef(chroma_mean, rotated)[0, 1])
+                if corr > best[0]:
+                    best = (corr, _KEY_NAMES[i], mode)
+        _, key, mode = best
+
+        # Loudness (approximate dBFS via RMS) + spectral centroid ("brightness").
+        rms = float(np.sqrt(np.mean(np.square(y))))
+        loudness_db = float(20 * np.log10(rms + 1e-9))
+        centroid = float(librosa.feature.spectral_centroid(y=y, sr=sr).mean())
+
+        return {
+            "bpm": bpm,
+            "key": key,
+            "mode": mode,
+            "duration_seconds": round(duration, 2),
+            "loudness_db": round(loudness_db, 1),
+            "spectral_centroid_hz": int(round(centroid)),
+            "energy": round(rms, 4),
+        }
+    except Exception:
+        traceback.print_exc()
+        return None
 
 
 def _config():
@@ -166,7 +239,14 @@ def handler(event):
         ordered_paths = {name: paths[name] for name in order if name in paths}
         stems = _upload_stems(ordered_paths, supabase_url, key, bucket, output_prefix)
 
-        return {"job_id": job_id, "job_type": job_type, "stems": stems}
+        # Run librosa over the original input audio for BPM/key/loudness.
+        # Cheap (~3-5s) and powers the Track Inspector. Non-fatal on failure.
+        analysis = _analyze_audio(src)
+
+        result = {"job_id": job_id, "job_type": job_type, "stems": stems}
+        if analysis is not None:
+            result["analysis"] = analysis
+        return result
 
     finally:
         shutil.rmtree(work, ignore_errors=True)

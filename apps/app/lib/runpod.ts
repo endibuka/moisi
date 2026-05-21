@@ -1,5 +1,29 @@
 const RUNPOD_BASE = "https://api.runpod.ai/v2";
 
+/**
+ * Which RunPod endpoint a job lives on. Music-gen runs on YuE, everything
+ * else (separation, vocal-isolation) on the audio-separator endpoint. The
+ * Inngest watcher needs this to know which endpoint to /status against —
+ * polling the wrong endpoint returns 404 and jobs hang as "processing".
+ */
+export type RunpodEndpointKind = "separation" | "music_gen";
+
+function endpointIdFor(kind: RunpodEndpointKind): string {
+  const envVar =
+    kind === "music_gen" ? "RUNPOD_YUE_ENDPOINT_ID" : "RUNPOD_ENDPOINT_ID";
+  const value = process.env[envVar];
+  if (!value) {
+    throw new Error(`${envVar} is not configured.`);
+  }
+  return value;
+}
+
+function endpointKindForJobType(
+  jobType: string | undefined | null,
+): RunpodEndpointKind {
+  return jobType === "music_generation" ? "music_gen" : "separation";
+}
+
 export type SeparationInput = {
   audio_url: string;
   output_prefix: string;
@@ -85,21 +109,42 @@ export type RunpodStatus =
   | "CANCELLED"
   | "TIMED_OUT";
 
+export type TrackAnalysis = {
+  bpm: number | null;
+  key: string;
+  mode: "major" | "minor";
+  duration_seconds: number;
+  loudness_db: number;
+  spectral_centroid_hz: number;
+  energy: number;
+};
+
 export type RunpodStatusResponse = {
   id: string;
   status: RunpodStatus;
-  output?: { job_id?: string; stems?: Record<string, string> } | null;
+  output?: {
+    job_id?: string;
+    stems?: Record<string, string>;
+    analysis?: TrackAnalysis;
+  } | null;
   error?: string;
 };
 
-/** Poll RunPod for the live status of a previously-queued job. */
+/**
+ * Poll RunPod for the live status of a previously-queued job. `kind` MUST
+ * match the endpoint the job was originally queued on — RunPod scopes job
+ * ids per endpoint, so a wrong endpoint just returns 404. Both producers
+ * (separation + music-gen) attach the kind to the Inngest event so the
+ * watcher knows which to pass here.
+ */
 export async function getRunpodJobStatus(
   runpodId: string,
+  kind: RunpodEndpointKind,
 ): Promise<RunpodStatusResponse> {
-  const endpoint = process.env.RUNPOD_ENDPOINT_ID;
+  const endpoint = endpointIdFor(kind);
   const apiKey = process.env.RUNPOD_API_KEY;
-  if (!endpoint || !apiKey) {
-    throw new Error("RunPod env vars are not configured.");
+  if (!apiKey) {
+    throw new Error("RUNPOD_API_KEY is not configured.");
   }
 
   const res = await fetch(`${RUNPOD_BASE}/${endpoint}/status/${runpodId}`, {
@@ -111,3 +156,5 @@ export async function getRunpodJobStatus(
   }
   return (await res.json()) as RunpodStatusResponse;
 }
+
+export { endpointKindForJobType };

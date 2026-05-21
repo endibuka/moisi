@@ -2,4 +2,9 @@ runpod
 # audio-separator[gpu] bundles ONNX-GPU, PyTorch, Demucs and the UVR/MDX/Mel-Roformer
 # model loaders behind one Separator API. Replaces the standalone demucs CLI.
 audio-separator[gpu]
+# librosa + numpy for the lightweight feature extraction (BPM, key, loudness,
+# brightness) that powers the Track Inspector. Numpy is already a transitive
+# dep but pinning here makes the requirement explicit.
+librosa
+numpy
 requests

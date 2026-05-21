@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { generateMusic } from "@/app/actions/music-gen";
 import type { MusicGenJob } from "@/app/(dashboard)/tools/music-generator/page";
 import SegmentedControl from "@/components/SegmentedControl";
+import TickSlider from "@/components/TickSlider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   createClient,
@@ -87,8 +88,13 @@ export default function MusicGenFlow({
   /* ---------- realtime: new + updated jobs ---------- */
   useEffect(() => {
     if (!userId) return;
+    // Unique per mount — React Strict Mode double-invokes effects with a
+    // cleanup in between; if the channel name is deterministic, the new
+    // setup can race the old cleanup and Supabase throws "cannot add
+    // postgres_changes callbacks after subscribe()". A random suffix
+    // sidesteps the name collision entirely.
     const channel = supabase
-      .channel(`music_gen:${userId}`)
+      .channel(`music_gen:${userId}:${Math.random().toString(36).slice(2, 10)}`)
       .on(
         "postgres_changes",
         {
@@ -488,83 +494,6 @@ function formatMinSec(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-/**
- * Custom discrete slider — track with active cyan fill, tick dots that
- * brighten as the fill crosses them, white thumb with a cyan halo + soft
- * drop shadow. Native <input type="range"> sits invisible on top for drag,
- * keyboard, and screen-reader support.
- */
-function TickSlider({
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  ariaLabel,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-  ariaLabel?: string;
-}) {
-  const pct = ((value - min) / (max - min)) * 100;
-  const ticks: number[] = [];
-  for (let v = min; v <= max; v += step) ticks.push(v);
-
-  return (
-    <div className="relative h-5">
-      {/* Track */}
-      <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-[rgba(252,252,253,0.07)]">
-        <div
-          className="h-full rounded-full bg-[#00dae8] transition-[width] duration-150 ease-out"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-
-      {/* Tick dots */}
-      {ticks.map((v) => {
-        const tickPct = ((v - min) / (max - min)) * 100;
-        const active = v <= value;
-        return (
-          <span
-            key={v}
-            aria-hidden
-            className="pointer-events-none absolute top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors duration-150"
-            style={{
-              left: `${tickPct}%`,
-              backgroundColor: active
-                ? "rgba(0, 19, 22, 0.55)"
-                : "rgba(252,252,253,0.18)",
-            }}
-          />
-        );
-      })}
-
-      {/* Thumb */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#fcfcfd] shadow-[0_0_0_4px_rgba(0,218,232,0.18),0_2px_10px_rgba(0,0,0,0.35)] transition-[left] duration-150 ease-out"
-        style={{ left: `${pct}%` }}
-      />
-
-      {/* Native input layered on top — fully transparent, handles drag +
-          keyboard + a11y. */}
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        aria-label={ariaLabel}
-        className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0"
-      />
-    </div>
-  );
 }
 
 /* ---------------- TrackRow ---------------- */

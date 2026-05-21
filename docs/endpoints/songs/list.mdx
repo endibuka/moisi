@@ -1,0 +1,83 @@
+---
+title: List songs
+description: Paginate your music generation history, newest first.
+api: GET /v1/songs
+---
+
+Returns the caller's music generation jobs in reverse chronological
+order. Same cursor pagination as
+[GET /v1/separations](/endpoints/separations/list).
+
+## Request
+
+### Headers
+
+| Name | Required | Value |
+| --- | --- | --- |
+| `Authorization` | yes | `Bearer mk_live_…` |
+
+### Query
+
+<ParamField query="limit" type="number" default="50">
+  Max number of jobs per page. Clamped to `[1, 100]`.
+</ParamField>
+
+<ParamField query="cursor" type="string (ISO 8601)">
+  Pass the `next_cursor` from the previous response to fetch the next
+  page. Omit on the first call.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Job rows. Same shape as
+  [GET /v1/songs/{id}](/endpoints/songs/get) — minus `audio_url`. Call
+  the single-job endpoint to mint a signed download URL.
+</ResponseField>
+
+<ResponseField name="next_cursor" type="string | null">
+  Pass to the next call to continue paginating, or `null` once you've
+  reached the end.
+</ResponseField>
+
+## Example
+
+```bash
+curl "https://app.moisi.app/api/v1/songs?limit=20" \
+  -H "Authorization: Bearer mk_live_…"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "01HF…",
+      "status": "completed",
+      "original_name": "Night drive",
+      "prompt": "indie folk, melancholy female vocal, …",
+      "lyrics": "[Verse 1]\n…\n\n[Chorus]\n…\n",
+      "stems": { "generated": "8f3a…/01HF…/generated.mp3" },
+      "error": null,
+      "created_at": "2026-05-21T09:00:01.000Z",
+      "updated_at": "2026-05-21T09:01:43.000Z",
+      "duration_seconds": 92.4,
+      "job_type": "music_generation"
+    }
+  ],
+  "next_cursor": "2026-05-20T18:42:00.000Z"
+}
+```
+
+## Paginating
+
+```bash
+# Page 1
+curl "https://app.moisi.app/api/v1/songs?limit=20" \
+  -H "Authorization: Bearer mk_live_…"
+
+# Page 2 — pass back the cursor from page 1
+curl "https://app.moisi.app/api/v1/songs?limit=20&cursor=2026-05-20T18:42:00.000Z" \
+  -H "Authorization: Bearer mk_live_…"
+```
+
+Keep going until `next_cursor === null`.

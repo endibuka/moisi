@@ -1,0 +1,99 @@
+---
+title: Get a song
+description: Fetch a music generation job, including a signed audio URL once it's done.
+api: GET /v1/songs/{id}
+---
+
+Returns a music generation job by id. When `status === "completed"`, the
+response also includes `audio_url` — a signed download URL (1h TTL) for
+the generated MP3.
+
+## Request
+
+### Headers
+
+| Name | Required | Value |
+| --- | --- | --- |
+| `Authorization` | yes | `Bearer mk_live_…` |
+
+### Path
+
+<ParamField path="id" type="string" required>
+  Job id, returned by [POST /v1/songs](/endpoints/songs/create).
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">UUID of the job.</ResponseField>
+<ResponseField name="status" type="string">
+  One of `pending`, `processing`, `completed`, `failed`.
+</ResponseField>
+<ResponseField name="original_name" type="string">
+  Display name (the `title` you supplied on creation, or one derived from
+  lyrics / prompt).
+</ResponseField>
+<ResponseField name="prompt" type="string">
+  Style / genre prompt that was passed in.
+</ResponseField>
+<ResponseField name="lyrics" type="string | null">
+  The structured lyrics, if any were supplied.
+</ResponseField>
+<ResponseField name="stems" type="object | null">
+  Internal storage paths. Use `audio_url` below for a ready-to-fetch URL.
+</ResponseField>
+<ResponseField name="audio_url" type="string | null">
+  Signed download URL for the generated track, valid 1 hour. Only
+  populated when `status === "completed"`. Refresh by calling this
+  endpoint again.
+</ResponseField>
+<ResponseField name="error" type="string | null">
+  Failure reason when `status === "failed"`.
+</ResponseField>
+<ResponseField name="duration_seconds" type="number | null">
+  Estimated duration in seconds (refined to the actual length once
+  generation finishes).
+</ResponseField>
+<ResponseField name="created_at" type="string (ISO 8601)" />
+<ResponseField name="updated_at" type="string (ISO 8601)" />
+<ResponseField name="job_type" type="string">Always `music_generation`.</ResponseField>
+
+## Example
+
+```bash
+curl https://app.moisi.app/api/v1/songs/01HF… \
+  -H "Authorization: Bearer mk_live_…"
+```
+
+```json
+{
+  "id": "01HF…",
+  "status": "completed",
+  "original_name": "Night drive",
+  "prompt": "indie folk, melancholy female vocal, fingerpicked acoustic guitar, soft brushed drums, 78 bpm",
+  "lyrics": "[Verse 1]\n…\n\n[Chorus]\n…\n",
+  "stems": { "generated": "8f3a…/01HF…/generated.mp3" },
+  "audio_url": "https://…signed-1h-url…",
+  "error": null,
+  "duration_seconds": 92.4,
+  "created_at": "2026-05-21T09:00:01.000Z",
+  "updated_at": "2026-05-21T09:01:43.000Z",
+  "job_type": "music_generation"
+}
+```
+
+## Polling
+
+Music generation takes roughly 1–3 minutes depending on the requested
+length. Poll at most once every 2 seconds.
+
+<Tip>
+  If you need to fetch the audio later (after the 1h signed URL expires),
+  call this endpoint again — fresh URLs are minted each time.
+</Tip>
+
+## Errors
+
+| Code | When |
+| --- | --- |
+| `missing_api_key` / `invalid_api_key` / `revoked_api_key` | Auth. |
+| `not_found` | No job with that id, the id belongs to another account, or it's a separation job (not a song). |

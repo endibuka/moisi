@@ -26,7 +26,7 @@ export async function GET(
   const { data: job, error } = await admin
     .from("separation_jobs")
     .select(
-      "id, user_id, status, original_name, input_path, stems, error, created_at, updated_at, duration_seconds, job_type",
+      "id, user_id, status, original_name, input_path, stems, cover_art_path, error, created_at, updated_at, duration_seconds, job_type",
     )
     .eq("id", id)
     .maybeSingle();
@@ -67,9 +67,22 @@ export async function GET(
     }
   }
 
+  // Cover art is optional. If a path is set, mint a fresh signed URL.
+  let coverArtUrl: string | null = null;
+  if (job.cover_art_path) {
+    const { data: signed } = await admin.storage
+      .from("stems")
+      .createSignedUrl(job.cover_art_path, 60 * 60);
+    coverArtUrl = signed?.signedUrl ?? null;
+  }
+
   // Strip user_id from the public response shape — it's an internal field
   // and we don't echo it back to API clients.
   const publicFields = { ...job };
   delete (publicFields as { user_id?: string }).user_id;
-  return jsonOk({ ...publicFields, stem_urls: stemUrls });
+  return jsonOk({
+    ...publicFields,
+    stem_urls: stemUrls,
+    cover_art_url: coverArtUrl,
+  });
 }

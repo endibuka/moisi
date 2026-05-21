@@ -122,7 +122,7 @@ export default function Workspace({
   // Live job status updates.
   useEffect(() => {
     const channel = supabase
-      .channel("separation_jobs")
+      .channel(`separation_jobs:${Math.random().toString(36).slice(2, 10)}`)
       .on(
         "postgres_changes",
         {
