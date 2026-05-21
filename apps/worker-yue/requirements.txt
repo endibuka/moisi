@@ -1,14 +1,21 @@
 runpod
 requests
 # YuE is a research repo; install it as a git checkout in the Dockerfile.
-# Pin its core deps here so pip resolves them at build time.
-torch
-torchaudio
-transformers>=4.45
-accelerate
+# torch / torchaudio come from the pytorch/pytorch:2.4.1-cuda12.1 base image —
+# don't re-list them here, pip would re-resolve and risk pulling a mismatched
+# wheel.
+#
+# Hard-pin the transformer stack to the combo YuE's inference/infer.py is
+# written against. Floating to transformers 4.48+ breaks lazy imports
+# (`Could not import module 'GenerationMixin'`); floating tokenizers /
+# accelerate / huggingface_hub independently triggers similar resolution
+# errors at first import.
+transformers==4.45.2
+tokenizers==0.20.3
+accelerate==0.34.2
+huggingface_hub==0.25.2
 sentencepiece
 einops
 omegaconf
 safetensors
-huggingface_hub
 soundfile
