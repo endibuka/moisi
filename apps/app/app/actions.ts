@@ -3,8 +3,38 @@
 import { startRunpodSeparation } from "@/lib/runpod";
 import { createClient } from "@/lib/supabase/server";
 import { inngest } from "@/lib/inngest/client";
+import type { StemName } from "@/lib/separation";
 
 type StartResult = { jobId?: string; error?: string };
+
+/**
+ * Persist client-computed waveform peaks back to the job row so subsequent
+ * page loads can render WaveSurfer instantly without re-fetching audio.
+ *
+ * Peaks shape: { [stem]: number[][] } — one number[] per audio channel.
+ */
+export async function saveWaveformPeaks(
+  jobId: string,
+  peaks: Partial<Record<StemName, number[][]>>,
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in." };
+
+  // RLS already restricts updates to the owner; the update is a no-op for
+  // anyone else.
+  const { error } = await supabase
+    .from("separation_jobs")
+    .update({ waveform_peaks: peaks })
+    .eq("id", jobId);
+  if (error) {
+    console.error("[waveform] saveWaveformPeaks error:", error);
+    return { error: error.message };
+  }
+  return { ok: true };
+}
 
 /**
  * Creates a separation job for an already-uploaded file and queues it on
@@ -14,6 +44,7 @@ type StartResult = { jobId?: string; error?: string };
 export async function startSeparation(
   inputPath: string,
   originalName: string,
+  durationSeconds: number | null = null,
 ): Promise<StartResult> {
   const supabase = await createClient();
   const {
@@ -32,6 +63,7 @@ export async function startSeparation(
       user_id: user.id,
       original_name: originalName,
       input_path: inputPath,
+      duration_seconds: durationSeconds,
     })
     .select("id")
     .single();

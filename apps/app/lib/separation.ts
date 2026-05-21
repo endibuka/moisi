@@ -13,6 +13,14 @@ export type JobStatus = "pending" | "processing" | "completed" | "failed";
 // so consumers must tolerate missing keys.
 export type StemPaths = Partial<Record<StemName, string>>;
 
+/**
+ * WaveSurfer-style peaks per stem. Each stem value is one inner array per
+ * audio channel (mono = 1, stereo = 2). NULL on the job row means peaks
+ * haven't been computed yet — the client populates them after the first
+ * track view.
+ */
+export type WaveformPeaks = Partial<Record<StemName, number[][]>>;
+
 export type SeparationJob = {
   id: string;
   status: JobStatus;
@@ -21,6 +29,8 @@ export type SeparationJob = {
   stems: StemPaths | null;
   error: string | null;
   created_at: string;
+  duration_seconds: number | null;
+  waveform_peaks: WaveformPeaks | null;
 };
 
 export const STEM_NAMES: StemName[] = [
