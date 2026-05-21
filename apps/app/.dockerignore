@@ -1,0 +1,24 @@
+# Keep the Cloud Build upload + Docker context small. Anything not needed for
+# `npm ci` + `next build` should be excluded — speeds up every deploy.
+
+node_modules
+.next
+.next/cache
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+*.log
+README.md
+.vscode
+.idea
+.DS_Store
+
+# Dev-only Cloudflare tunnel scratch
+.cloudflared
+
+# Don't ship the test/playwright/jest output if it ever exists
+coverage
+playwright-report
+test-results
