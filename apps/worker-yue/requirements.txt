@@ -1,0 +1,14 @@
+runpod
+requests
+# YuE is a research repo; install it as a git checkout in the Dockerfile.
+# Pin its core deps here so pip resolves them at build time.
+torch
+torchaudio
+transformers>=4.45
+accelerate
+sentencepiece
+einops
+omegaconf
+safetensors
+huggingface_hub
+soundfile

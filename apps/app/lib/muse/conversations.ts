@@ -208,3 +208,19 @@ export async function deleteConversation(id: string): Promise<void> {
     .eq("id", id);
   if (error) console.error("[muse] deleteConversation error:", error);
 }
+
+/** Rename a conversation. Title is trimmed and capped at 200 chars; empty
+ * titles are rejected so the row never ends up unlabeled. */
+export async function renameConversation(
+  id: string,
+  title: string,
+): Promise<void> {
+  const trimmed = title.trim().slice(0, 200);
+  if (!trimmed) return;
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("muse_conversations")
+    .update({ title: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) console.error("[muse] renameConversation error:", error);
+}

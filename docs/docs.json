@@ -1,0 +1,48 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Moises API",
+  "description": "REST API for programmatic stem separation, vocal isolation, and music generation.",
+  "colors": {
+    "primary": "#00dae8",
+    "light": "#0affa7",
+    "dark": "#00dae8"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "API reference",
+        "groups": [
+          {
+            "group": "Getting started",
+            "pages": [
+              "introduction",
+              "authentication",
+              "quickstart",
+              "errors"
+            ]
+          },
+          {
+            "group": "Uploads",
+            "pages": ["endpoints/uploads/create"]
+          },
+          {
+            "group": "Separations",
+            "pages": [
+              "endpoints/separations/create",
+              "endpoints/separations/get",
+              "endpoints/separations/list"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footerSocials": {},
+  "topbarCtaButton": {
+    "type": "link",
+    "name": "Dashboard",
+    "url": "https://app.moisi.app"
+  }
+}

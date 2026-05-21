@@ -5,12 +5,21 @@ import {
   deleteConversation,
   getConversation,
   listConversations,
+  renameConversation,
   type MuseConversationSummary,
   type MuseConversationWithMessages,
 } from "@/lib/muse/conversations";
 
 export async function deleteMuseConversation(id: string): Promise<void> {
   await deleteConversation(id);
+  revalidatePath("/muse", "layout");
+}
+
+export async function renameMuseConversation(
+  id: string,
+  title: string,
+): Promise<void> {
+  await renameConversation(id, title);
   revalidatePath("/muse", "layout");
 }
 

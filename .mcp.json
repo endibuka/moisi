@@ -3,6 +3,10 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp"
+    },
+    "mintlify-muse": {
+      "type": "http",
+      "url": "https://muse-6955b459.mintlify.app/mcp"
     }
   }
 }

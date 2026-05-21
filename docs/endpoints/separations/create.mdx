@@ -1,0 +1,90 @@
+---
+title: Create a separation
+description: Queue an uploaded audio file for stem separation, vocal isolation, or music generation.
+api: POST /v1/separations
+---
+
+Starts a separation job for an audio file you already uploaded via
+[POST /v1/uploads](/endpoints/uploads/create). The job is queued on GPU
+workers immediately; this endpoint returns within a few hundred
+milliseconds with the job id, then you poll
+[GET /v1/separations/{id}](/endpoints/separations/get) until it
+completes.
+
+## Request
+
+### Headers
+
+| Name | Required | Value |
+| --- | --- | --- |
+| `Authorization` | yes | `Bearer mk_live_…` |
+| `Content-Type` | yes | `application/json` |
+
+### Body
+
+<ParamField body="inputPath" type="string" required>
+  The `path` returned by [POST /v1/uploads](/endpoints/uploads/create).
+  Must belong to your own account — paths in another user's folder are
+  rejected.
+</ParamField>
+
+<ParamField body="originalName" type="string" required>
+  The user-facing filename. Shown in dashboards and emails; not
+  interpreted by the worker.
+</ParamField>
+
+<ParamField body="durationSeconds" type="number">
+  Optional. Duration of the audio in seconds. If omitted, the worker
+  derives it from the file during processing. Providing it up-front makes
+  the dashboard's job row show the duration immediately.
+</ParamField>
+
+<ParamField body="jobType" type="string" default="separation">
+  One of `separation`, `vocal_isolation`, `music_generation`.
+
+  - `separation` — full 6-stem split (vocals, drums, bass, guitar, piano, other)
+  - `vocal_isolation` — fast 2-stem path (vocals, instrumental)
+  - `music_generation` — generative job; see the music-generation guide
+</ParamField>
+
+## Response
+
+`201 Created`. Returns the full job row, same shape as
+[GET /v1/separations/{id}](/endpoints/separations/get) — with
+`status: "pending"` or `"processing"` until the GPU worker finishes.
+
+```json
+{
+  "id": "01HF…",
+  "status": "processing",
+  "original_name": "song.mp3",
+  "input_path": "8f3a…/01HF…/song.mp3",
+  "stems": null,
+  "error": null,
+  "duration_seconds": 187.3,
+  "created_at": "2026-05-21T09:00:01.000Z",
+  "updated_at": "2026-05-21T09:00:01.500Z",
+  "job_type": "separation"
+}
+```
+
+## Example
+
+```bash
+curl https://app.moisi.app/api/v1/separations \
+  -H "Authorization: Bearer mk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inputPath": "8f3a…/01HF…/song.mp3",
+    "originalName": "song.mp3",
+    "durationSeconds": 187.3
+  }'
+```
+
+## Errors
+
+| Code | When |
+| --- | --- |
+| `missing_api_key` / `invalid_api_key` / `revoked_api_key` | See [Authentication](/authentication). |
+| `invalid_request` | `inputPath` or `originalName` missing, `inputPath` doesn't belong to your account, or `jobType` is unrecognized. |
+| `internal_error` | Queue / storage error. Safe to retry. |

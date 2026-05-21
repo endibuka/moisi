@@ -17,9 +17,10 @@ function makeQueryClient() {
         // Treat data as fresh for 60s — within that window cached views render
         // instantly with no spinner; after that we refetch in background.
         staleTime: 60 * 1000,
-        // Keep unused query data in cache for 10 min so back-navigation is
-        // instant.
-        gcTime: 10 * 60 * 1000,
+        // gcTime must be ≥ persister maxAge (7d) so cached rows aren't
+        // evicted before persistence kicks in. Browser-only memory cost is
+        // small — entries are evicted from IDB by the persister's TTL.
+        gcTime: 1000 * 60 * 60 * 24 * 7,
         refetchOnWindowFocus: true,
         retry: 1,
       },

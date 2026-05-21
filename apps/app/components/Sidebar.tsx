@@ -1,5 +1,25 @@
 "use client";
 
+import {
+  ArrowsLeftRight,
+  Code,
+  DotsThreeVertical,
+  Gift,
+  type Icon,
+  Image as ImageIcon,
+  Lightning,
+  Microphone,
+  MusicNote,
+  MusicNotes,
+  MusicNotesPlus,
+  PencilSimple,
+  Plus,
+  SidebarSimple,
+  Sparkle,
+  Trash,
+  UsersThree,
+  X,
+} from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -9,98 +29,21 @@ import {
   useConversations,
   useDeleteConversation,
   usePrefetchConversation,
+  useRenameConversation,
 } from "@/lib/muse/hooks";
+import CommunityModal from "./CommunityModal";
+import ConfirmModal from "./ConfirmModal";
+import DeveloperModal from "./DeveloperModal";
 import SettingsModal from "./SettingsModal";
+import WhatsNewModal from "./WhatsNewModal";
 
-/* ---- icons (16px stroke) ---- */
-type IconProps = { className?: string };
 const ic = "h-4 w-4 shrink-0";
-
-function IconSeparation({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-    </svg>
-  );
-}
-function IconMuse({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2.5 13.7 8 19 9.7 13.7 11.4 12 17l-1.7-5.6L5 9.7 10.3 8 12 2.5Z" />
-      <path d="M19 14.5 19.9 17 22.5 18l-2.6 1L19 21.5 18.1 19 15.5 18l2.6-1L19 14.5Z" opacity="0.7" />
-    </svg>
-  );
-}
-function IconZap({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 2 4 14h7l-2 8 9-12h-7l2-8Z" />
-    </svg>
-  );
-}
-function IconPanel({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M9 4v16" />
-    </svg>
-  );
-}
-function IconPlus({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-function IconMusic({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 18V6l11-2v12" />
-      <circle cx="6" cy="18" r="3" />
-      <circle cx="17" cy="16" r="3" />
-    </svg>
-  );
-}
-function IconBook({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19V5a2 2 0 0 1 2-2h13v17H6a2 2 0 0 0-2 2Z" />
-      <path d="M8 7h7M8 11h7" />
-    </svg>
-  );
-}
-function IconUsers({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="9" cy="8" r="3.5" />
-      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
-      <circle cx="17.5" cy="9" r="2.5" />
-      <path d="M16 14.5A5.5 5.5 0 0 1 21.5 20" />
-    </svg>
-  );
-}
-function IconGift({ className = ic }: IconProps) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="8" width="18" height="4" rx="1" />
-      <path d="M5 12v9h14v-9M12 8v13M12 8c0-3-4-5-4-2 0 1.5 2 2 4 2Zm0 0c0-3 4-5 4-2 0 1.5-2 2-4 2Z" />
-    </svg>
-  );
-}
 
 export type SidebarJob = {
   id: string;
   original_name: string;
   status: "pending" | "processing" | "completed" | "failed";
 };
-
-
-const RESOURCES = [
-  { label: "Docs", Icon: IconBook, href: "/docs" },
-  { label: "Community", Icon: IconUsers, href: "#" },
-  { label: "What's new", Icon: IconGift, href: "#" },
-];
 
 export default function Sidebar({
   userName,
@@ -114,13 +57,35 @@ export default function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [communityOpen, setCommunityOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [developerOpen, setDeveloperOpen] = useState(false);
+  // Persist Go-Pro card dismissal across reloads (per-browser). Starts false
+  // so SSR matches first client render, then hydrates from localStorage.
+  const [upgradeDismissed, setUpgradeDismissed] = useState(false);
+  useEffect(() => {
+    try {
+      setUpgradeDismissed(localStorage.getItem("moisi.upgradeDismissed") === "1");
+    } catch {
+      // localStorage can throw in private mode / sandboxed iframes.
+    }
+  }, []);
+  const dismissUpgrade = () => {
+    setUpgradeDismissed(true);
+    try {
+      localStorage.setItem("moisi.upgradeDismissed", "1");
+    } catch {
+      // ignore
+    }
+  };
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
   const museActive = pathname?.startsWith("/muse") ?? false;
   const activeChatId = museActive ? searchParams.get("c") : null;
   const trackActive =
-    pathname === "/" || (pathname?.startsWith("/track/") ?? false);
+    (pathname?.startsWith("/library") ?? false) ||
+    (pathname?.startsWith("/track/") ?? false);
   const chatsOpen = museActive && !collapsed;
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +94,7 @@ export default function Sidebar({
   const { data: recentChats = [] } = useConversations();
   const prefetchConversation = usePrefetchConversation();
   const deleteConversation = useDeleteConversation();
+  const renameConversation = useRenameConversation();
 
   const startNewChat = () => {
     const id =
@@ -169,23 +135,25 @@ export default function Sidebar({
             collapsed ? "mx-auto" : ""
           }`}
         >
-          <IconPanel />
+          <SidebarSimple weight="fill" className={ic} />
         </button>
       </div>
 
-      {/* scrollable nav */}
-      <ScrollArea className="flex-1" viewportClassName="px-3 pb-3">
+      {/* scrollable nav — fade overlay at the bottom hints at more chats
+          below when the list is long. */}
+      <div className="relative flex-1 overflow-hidden">
+      <ScrollArea className="h-full" viewportClassName="px-3 pb-10">
       <div className="flex flex-col gap-1">
         {/* Muse — the featured AI entry point */}
         <Link
           href="/muse"
           title={collapsed ? "Muse" : undefined}
           aria-current={museActive ? "page" : undefined}
-          className={`group relative flex h-9 items-center rounded-[8px] bg-[rgba(252,253,255,0.06)] text-[13px] font-medium text-[#fcfcfd] shadow-[0_1px_0_rgba(255,255,255,0.06)_inset] transition-colors hover:bg-[rgba(252,253,255,0.10)] ${
+          className={`group relative flex h-9 items-center rounded-[8px] bg-[rgba(252,253,255,0.06)] text-[13px] font-medium text-[#fcfcfd] shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_0_rgba(0,0,0,0.25),inset_0_0_0_1px_rgba(255,255,255,0.04)] transition-colors hover:bg-[rgba(252,253,255,0.12)] ${
             collapsed ? "justify-center" : "gap-2 px-3"
-          } ${museActive ? "bg-[rgba(252,253,255,0.12)]" : ""}`}
+          } ${museActive ? "bg-[rgba(252,253,255,0.14)]" : ""}`}
         >
-          <IconMuse className="h-3.5 w-3.5 text-[#fcfcfd]" />
+          <Sparkle weight="fill" className="h-3.5 w-3.5 shrink-0 text-[#fcfcfd]" />
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Muse</span>
@@ -195,44 +163,6 @@ export default function Sidebar({
             </>
           )}
         </Link>
-
-        {/* Tools */}
-        {!collapsed && <SectionLabel className="mt-3">Tools</SectionLabel>}
-        <NavLink
-          href="/"
-          label="Track Separation"
-          Icon={IconSeparation}
-          active={trackActive}
-          collapsed={collapsed}
-        />
-
-        {/* Library — recent jobs surface live */}
-        {!collapsed && (
-          <SectionLabel className="mt-3">
-            Library
-            {recentJobs.length > 0 && (
-              <span className="ml-2 text-[rgba(229,237,253,0.36)]">
-                {recentJobs.length}
-              </span>
-            )}
-          </SectionLabel>
-        )}
-        {recentJobs.length === 0 ? (
-          !collapsed && (
-            <p className="px-3 py-2 text-[11px] leading-relaxed text-[rgba(229,237,253,0.36)]">
-              Your separated tracks will land here.
-            </p>
-          )
-        ) : (
-          recentJobs.map((job) => (
-            <LibraryRow
-              key={job.id}
-              job={job}
-              collapsed={collapsed}
-              active={pathname === `/track/${job.id}`}
-            />
-          ))
-        )}
 
         {/* Chats — contextual sub-nav, only visible while on /muse */}
         <div
@@ -260,7 +190,7 @@ export default function Sidebar({
               className="flex h-9 w-full items-center gap-3 rounded-[6px] px-3 text-[13px] text-[rgba(241,247,254,0.71)] transition-colors hover:bg-[rgba(221,234,248,0.04)] hover:text-white"
             >
               <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-[rgba(252,253,255,0.18)]">
-                <IconPlus className="h-2.5 w-2.5" />
+                <Plus weight="bold" className="h-2.5 w-2.5 shrink-0" />
               </span>
               <span className="truncate">New chat</span>
             </button>
@@ -269,60 +199,198 @@ export default function Sidebar({
                 Past conversations will appear here.
               </p>
             ) : (
-              recentChats.map((chat) => (
-                <ChatRow
-                  key={chat.id}
-                  chat={chat}
-                  active={activeChatId === chat.id}
-                  onHover={() => prefetchConversation(chat.id)}
-                  onDelete={() => {
-                    deleteConversation.mutate(chat.id);
-                    if (activeChatId === chat.id) {
-                      // Active chat got deleted — start a fresh one.
-                      const id =
-                        typeof crypto !== "undefined" &&
-                        "randomUUID" in crypto
-                          ? crypto.randomUUID()
-                          : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                      router.push(`/muse?c=${id}`);
-                    }
-                  }}
-                />
-              ))
+              // Cap the visible list so a long chat history doesn't push the
+              // rest of the sidebar (Tools, Library, etc.) off-screen.
+              // ~7 chats (36px each + gap) fit before scrolling kicks in;
+              // anything beyond that scrolls inside this contained area.
+              <div className="relative">
+                <ScrollArea className="max-h-[268px]">
+                  <div className="flex flex-col">
+                    {recentChats.map((chat) => (
+                      <ChatRow
+                        key={chat.id}
+                        chat={chat}
+                        active={activeChatId === chat.id}
+                        onHover={() => prefetchConversation(chat.id)}
+                        onRename={(title) =>
+                          renameConversation.mutate({ id: chat.id, title })
+                        }
+                        onDelete={() => {
+                          deleteConversation.mutate(chat.id);
+                          if (activeChatId === chat.id) {
+                            // Active chat got deleted — start a fresh one.
+                            const id =
+                              typeof crypto !== "undefined" &&
+                              "randomUUID" in crypto
+                                ? crypto.randomUUID()
+                                : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                            router.push(`/muse?c=${id}`);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+                {/* Fade overlay at the bottom hints at more chats below
+                    when the list overflows. Pointer-events-none so it
+                    doesn't intercept clicks on the last visible row. */}
+                {recentChats.length > 7 && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-[#111113] to-transparent"
+                  />
+                )}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Resources */}
-        {!collapsed && (
-          <SectionLabel className="mt-3">Resources</SectionLabel>
-        )}
-        {RESOURCES.map((item) => (
-          <NavLink
-            key={item.label}
-            href={item.href}
-            label={item.label}
-            Icon={item.Icon}
-            collapsed={collapsed}
-          />
-        ))}
+        {/* Tools */}
+        {!collapsed && <SectionLabel className="mt-3">Tools</SectionLabel>}
+        <NavLink
+          href="/library"
+          label="Track Separation"
+          Icon={ArrowsLeftRight}
+          active={trackActive}
+          collapsed={collapsed}
+        />
+        <NavLink
+          href="/tools/vocal-isolator"
+          label="Vocal Isolator"
+          Icon={Microphone}
+          active={pathname?.startsWith("/tools/vocal-isolator") ?? false}
+          collapsed={collapsed}
+        />
+        <NavLink
+          href="/tools/karaoke"
+          label="Karaoke Maker"
+          Icon={MusicNote}
+          active={pathname?.startsWith("/tools/karaoke") ?? false}
+          collapsed={collapsed}
+        />
+        <NavLink
+          href="/tools/music-generator"
+          label="Music Generator"
+          Icon={MusicNotesPlus}
+          active={pathname?.startsWith("/tools/music-generator") ?? false}
+          collapsed={collapsed}
+        />
+        <NavLink
+          href="/tools/cover-art"
+          label="Cover Art"
+          Icon={ImageIcon}
+          active={pathname?.startsWith("/tools/cover-art") ?? false}
+          collapsed={collapsed}
+        />
+
+        {/* Library — recent jobs surface live, capped at the 5 newest so the
+            sidebar doesn't grow unbounded as the user's history fills up. */}
+        {(() => {
+          const libraryJobs = recentJobs.slice(0, 5);
+          return (
+            <>
+              {!collapsed && (
+                <SectionLabel className="mt-3">
+                  Library
+                  {libraryJobs.length > 0 && (
+                    <span className="ml-2 text-[rgba(229,237,253,0.36)]">
+                      {libraryJobs.length}
+                    </span>
+                  )}
+                </SectionLabel>
+              )}
+              {libraryJobs.length === 0
+                ? !collapsed && (
+                    <p className="px-3 py-2 text-[11px] leading-relaxed text-[rgba(229,237,253,0.36)]">
+                      Your separated tracks will land here.
+                    </p>
+                  )
+                : libraryJobs.map((job) => (
+                    <LibraryRow
+                      key={job.id}
+                      job={job}
+                      collapsed={collapsed}
+                      active={pathname === `/track/${job.id}`}
+                    />
+                  ))}
+            </>
+          );
+        })()}
+
       </div>
       </ScrollArea>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#111113] to-transparent"
+      />
+      </div>
 
-      {/* bottom: upgrade + user menu */}
-      <div ref={menuRef} className="relative p-3">
-        <button
-          type="button"
-          title={collapsed ? "Upgrade Plan" : undefined}
-          className={`flex h-9 w-full items-center rounded-[6px] bg-gradient-to-r from-[#00dae8] to-[#0affa7] text-[13px] font-medium text-[#001316] shadow-[0_1px_0_rgba(255,255,255,0.18)_inset,0_8px_24px_-12px_rgba(0,218,232,0.55)] transition-opacity hover:opacity-90 ${
-            collapsed ? "justify-center" : "justify-center gap-2 px-3"
-          }`}
-        >
-          <IconZap />
-          {!collapsed && <span>Upgrade Plan</span>}
-        </button>
+      {/* bottom: resources + developer + upgrade + user menu */}
+      <div ref={menuRef} className="relative border-t border-[#212225] p-3">
+        <div className="mb-1.5 flex flex-col gap-0.5">
+          <NavButton
+            label="Community"
+            Icon={UsersThree}
+            collapsed={collapsed}
+            onClick={() => setCommunityOpen(true)}
+          />
+          <NavButton
+            label="What's new"
+            Icon={Gift}
+            collapsed={collapsed}
+            onClick={() => setWhatsNewOpen(true)}
+          />
+          <NavButton
+            label="Developer"
+            Icon={Code}
+            collapsed={collapsed}
+            onClick={() => setDeveloperOpen(true)}
+          />
+        </div>
 
-        <div className="my-3 h-px bg-[#212225]" />
+        {!upgradeDismissed &&
+          (collapsed ? (
+            // Collapsed: compact glowing badge — the gradient is the only Pro
+            // signifier, sized to match other sidebar icons. (No X here —
+            // there's no room; dismiss is exposed in the expanded card.)
+            <button
+              type="button"
+              title="Upgrade to Pro"
+              className="mx-auto flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-[#00dae8] to-[#0affa7] text-[#001316] shadow-[0_4px_16px_-6px_rgba(0,218,232,0.55)] transition-transform hover:scale-105"
+            >
+              <Lightning weight="fill" className="h-4 w-4" />
+            </button>
+          ) : (
+            // Expanded: small card following STYLING.md — faint inner surface,
+            // card border, gradient icon badge, primary cyan CTA, dismiss X.
+            <div className="relative rounded-[16px] border border-[rgba(252,252,253,0.1)] bg-[rgba(252,252,253,0.03)] p-3">
+              <button
+                type="button"
+                onClick={dismissUpgrade}
+                aria-label="Dismiss upgrade prompt"
+                className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full text-[rgba(252,252,253,0.5)] transition-colors hover:bg-[rgba(252,252,253,0.08)] hover:text-[#fcfcfd]"
+              >
+                <X weight="bold" className="h-3 w-3" />
+              </button>
+              <div className="flex items-center gap-2 pr-6">
+                <span className="flex size-7 items-center justify-center rounded-full bg-gradient-to-br from-[#00dae8] to-[#0affa7] text-[#001316] shadow-[0_2px_10px_-4px_rgba(0,218,232,0.5)]">
+                  <Lightning weight="fill" className="h-3.5 w-3.5" />
+                </span>
+                <p className="text-[13px] font-medium text-[#fcfcfd]">Go Pro</p>
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed text-[rgba(252,252,253,0.6)]">
+                Unlimited separations, longer tracks, priority queue.
+              </p>
+              <button
+                type="button"
+                className="mt-3 flex h-8 w-full items-center justify-center rounded-full bg-[#00dae8] text-[12px] font-medium text-[#001316] transition-opacity hover:opacity-90"
+              >
+                Upgrade
+              </button>
+            </div>
+          ))}
+
+        <div className="my-3 h-px bg-[rgba(252,252,253,0.06)]" />
         {menuOpen && (
           <div className="absolute bottom-[68px] left-3 right-3 overflow-hidden rounded-[8px] border border-[#212225] bg-[#1a1b1e] py-1 shadow-lg">
             <p className="truncate px-3 py-2 text-[12px] text-[rgba(229,237,253,0.48)]">
@@ -351,7 +419,7 @@ export default function Sidebar({
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
-          className={`flex w-full items-center gap-3 rounded-full p-1 transition-colors hover:bg-[rgba(221,234,248,0.06)] ${
+          className={`flex w-full items-center gap-3 rounded-[10px] p-1.5 transition-colors hover:bg-[rgba(221,234,248,0.06)] ${
             collapsed ? "justify-center" : ""
           }`}
         >
@@ -380,7 +448,45 @@ export default function Sidebar({
         userName={userName}
         userEmail={userEmail}
       />
+      <CommunityModal
+        open={communityOpen}
+        onClose={() => setCommunityOpen(false)}
+      />
+      <WhatsNewModal
+        open={whatsNewOpen}
+        onClose={() => setWhatsNewOpen(false)}
+      />
+      <DeveloperModal
+        open={developerOpen}
+        onClose={() => setDeveloperOpen(false)}
+      />
     </aside>
+  );
+}
+
+function NavButton({
+  label,
+  Icon,
+  collapsed,
+  onClick,
+}: {
+  label: string;
+  Icon: Icon;
+  collapsed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={collapsed ? label : undefined}
+      onClick={onClick}
+      className={`flex h-9 w-full items-center rounded-[6px] text-[13px] text-[rgba(241,247,254,0.71)] transition-colors hover:bg-[rgba(221,234,248,0.04)] hover:text-white ${
+        collapsed ? "justify-center" : "gap-3 px-3"
+      }`}
+    >
+      <Icon weight="fill" className={ic} />
+      {!collapsed && <span className="flex-1 text-left">{label}</span>}
+    </button>
   );
 }
 
@@ -409,17 +515,25 @@ function NavLink({
   collapsed,
 }: {
   label: string;
-  Icon: (p: IconProps) => React.JSX.Element;
+  Icon: Icon;
   href: string;
   active?: boolean;
   badge?: string;
   collapsed: boolean;
 }) {
+  // Eager hover prefetch — by the time the click registers, the page's RSC
+  // payload + data is already warm in the router cache. Native <Link>
+  // viewport prefetch only fetches the loading shell for dynamic routes,
+  // which is why nav felt sluggish; this triggers the full prefetch.
+  const router = useRouter();
+  const prefetch = () => router.prefetch(href);
   return (
     <Link
       href={href}
       title={collapsed ? label : undefined}
       aria-current={active ? "page" : undefined}
+      onMouseEnter={prefetch}
+      onFocus={prefetch}
       className={`flex h-9 items-center rounded-[6px] text-[13px] transition-colors ${
         collapsed ? "justify-center" : "gap-3 px-3"
       } ${
@@ -428,7 +542,7 @@ function NavLink({
           : "text-[rgba(241,247,254,0.71)] hover:bg-[rgba(221,234,248,0.04)] hover:text-white"
       }`}
     >
-      <Icon />
+      <Icon weight="fill" className={ic} />
       {!collapsed && <span className="flex-1 text-left">{label}</span>}
       {!collapsed && badge && (
         <span className="rounded-[3px] bg-[rgba(222,238,255,0.08)] px-1.5 py-0.5 text-[11px] text-[rgba(241,247,255,0.71)]">
@@ -444,59 +558,180 @@ function ChatRow({
   active,
   onHover,
   onDelete,
+  onRename,
 }: {
   chat: { id: string; title: string };
   active: boolean;
   onHover: () => void;
   onDelete: () => void;
+  onRename: (title: string) => void;
 }) {
-  return (
-    <div className="group/chat relative">
-      <Link
-        href={`/muse?c=${chat.id}`}
-        onMouseEnter={onHover}
-        onFocus={onHover}
-        className={`flex h-9 items-center gap-3 rounded-[6px] pl-3 pr-8 text-[13px] transition-colors ${
-          active
-            ? "bg-[rgba(221,234,248,0.08)] text-[rgba(252,253,255,0.94)]"
-            : "text-[rgba(241,247,254,0.71)] hover:bg-[rgba(221,234,248,0.04)] hover:text-white"
-        }`}
-      >
-        <span
-          className={`size-1.5 shrink-0 rounded-full ${
-            active ? "bg-[#00dae8]" : "bg-[rgba(252,253,255,0.18)]"
-          }`}
-        />
-        <span className="min-w-0 flex-1 truncate">{chat.title}</span>
-      </Link>
-      <button
-        type="button"
-        title="Delete chat"
-        aria-label="Delete chat"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (
-            typeof window !== "undefined" &&
-            !window.confirm(`Delete "${chat.title}"?`)
-          ) {
-            return;
-          }
-          onDelete();
-        }}
-        className="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded text-[rgba(241,247,254,0.45)] opacity-0 transition-opacity hover:bg-[rgba(255,93,93,0.12)] hover:text-[#ff8a8a] group-hover/chat:opacity-100"
-      >
-        <IconTrash className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(chat.title);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-function IconTrash({ className = ic }: IconProps) {
+  const closeMenu = () => {
+    setMenuOpen(false);
+  };
+
+  // Close the dropdown on outside click. Editing mode handles its own
+  // commit-on-blur, so we don't tie the two together.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (rowRef.current && !rowRef.current.contains(e.target as Node)) {
+        closeMenu();
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [menuOpen]);
+
+  // Focus + select the input when entering edit mode.
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const startEdit = () => {
+    setDraft(chat.title);
+    setEditing(true);
+    closeMenu();
+  };
+
+  const commitEdit = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== chat.title) onRename(trimmed);
+    setEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setDraft(chat.title);
+    setEditing(false);
+  };
+
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14" />
-    </svg>
+    <div ref={rowRef} className="group/chat relative">
+      {editing ? (
+        <div
+          className={`flex h-9 items-center gap-3 rounded-[6px] px-3 ${
+            active ? "bg-[rgba(221,234,248,0.08)]" : "bg-[rgba(221,234,248,0.04)]"
+          }`}
+        >
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${
+              active ? "bg-[#00dae8]" : "bg-[rgba(252,253,255,0.18)]"
+            }`}
+          />
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitEdit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancelEdit();
+              }
+            }}
+            maxLength={200}
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-[#fcfcfd] outline-none"
+          />
+        </div>
+      ) : (
+        <Link
+          href={`/muse?c=${chat.id}`}
+          onMouseEnter={onHover}
+          onFocus={onHover}
+          className={`flex h-9 items-center gap-3 rounded-[6px] pl-3 pr-8 text-[13px] transition-colors ${
+            active
+              ? "bg-[rgba(221,234,248,0.08)] text-[rgba(252,253,255,0.94)]"
+              : "text-[rgba(241,247,254,0.71)] hover:bg-[rgba(221,234,248,0.04)] hover:text-white"
+          }`}
+        >
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${
+              active ? "bg-[#00dae8]" : "bg-[rgba(252,253,255,0.18)]"
+            }`}
+          />
+          <span className="min-w-0 flex-1 truncate">{chat.title}</span>
+        </Link>
+      )}
+
+      {!editing && (
+        <button
+          type="button"
+          aria-label="Chat actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenuOpen((o) => !o);
+          }}
+          className={`absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded text-[rgba(241,247,254,0.6)] transition-opacity hover:bg-[rgba(252,253,255,0.06)] hover:text-white ${
+            menuOpen
+              ? "opacity-100"
+              : "opacity-0 group-hover/chat:opacity-100 focus-visible:opacity-100"
+          }`}
+        >
+          <DotsThreeVertical weight="bold" className="h-3.5 w-3.5 shrink-0" />
+        </button>
+      )}
+
+      {menuOpen && (
+        <div
+          role="menu"
+          className="absolute right-1 top-full z-20 mt-1 w-44 overflow-hidden rounded-[10px] border border-[#212225] bg-[#1a1b1e] py-1 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.5)]"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={startEdit}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-[rgba(241,247,254,0.85)] transition-colors hover:bg-[rgba(221,234,248,0.06)] hover:text-white"
+          >
+            <PencilSimple weight="fill" className="h-3.5 w-3.5 shrink-0" />
+            Edit name
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              setConfirmOpen(true);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-[#ff8a8a] transition-colors hover:bg-[rgba(255,93,93,0.10)] hover:text-[#ffaeae]"
+          >
+            <Trash weight="fill" className="h-3.5 w-3.5 shrink-0" />
+            Delete
+          </button>
+        </div>
+      )}
+
+      <ConfirmModal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={onDelete}
+        title="Delete this chat?"
+        description={
+          <>
+            This will permanently remove the conversation and all its messages.
+            <br />
+            <span className="text-[rgba(252,252,253,0.85)]">{chat.title}</span>
+          </>
+        }
+        confirmLabel="Delete"
+        destructive
+      />
+    </div>
   );
 }
 
@@ -511,7 +746,7 @@ function LibraryRow({
 }) {
   // Completed jobs route to the mixer; in-flight ones go to the library
   // (where the status / spinner is rendered).
-  const href = job.status === "completed" ? `/track/${job.id}` : "/";
+  const href = job.status === "completed" ? `/track/${job.id}` : "/library";
   const inFlight = job.status === "pending" || job.status === "processing";
   const failed = job.status === "failed";
   const router = useRouter();
@@ -534,7 +769,7 @@ function LibraryRow({
           : "text-[rgba(241,247,254,0.71)] hover:bg-[rgba(221,234,248,0.04)] hover:text-white"
       }`}
     >
-      <IconMusic className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      <MusicNotes weight="fill" className="h-3.5 w-3.5 shrink-0 opacity-70" />
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate">

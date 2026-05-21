@@ -1,0 +1,80 @@
+---
+title: List separations
+description: Paginate your job history, newest first.
+api: GET /v1/separations
+---
+
+Returns the caller's separation jobs in reverse chronological order.
+Cursor-paginated by `created_at` so new jobs don't shift existing pages.
+
+## Request
+
+### Headers
+
+| Name | Required | Value |
+| --- | --- | --- |
+| `Authorization` | yes | `Bearer mk_live_…` |
+
+### Query
+
+<ParamField query="limit" type="number" default="50">
+  Max number of jobs per page. Clamped to `[1, 100]`.
+</ParamField>
+
+<ParamField query="cursor" type="string (ISO 8601)">
+  Pass the `next_cursor` from the previous response to fetch the next
+  page. Omit on the first call.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Job rows, same shape as
+  [GET /v1/separations/{id}](/endpoints/separations/get) — minus
+  `stem_urls`. Call the single-job endpoint to mint download URLs.
+</ResponseField>
+
+<ResponseField name="next_cursor" type="string | null">
+  Pass to the next call to continue paginating, or `null` if you've
+  reached the end.
+</ResponseField>
+
+## Example
+
+```bash
+curl "https://app.moisi.app/api/v1/separations?limit=20" \
+  -H "Authorization: Bearer mk_live_…"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "01HF…",
+      "status": "completed",
+      "original_name": "song.mp3",
+      "stems": { "vocals": "…", "drums": "…", "bass": "…" },
+      "error": null,
+      "created_at": "2026-05-21T09:00:01.000Z",
+      "updated_at": "2026-05-21T09:02:14.000Z",
+      "duration_seconds": 187.3,
+      "job_type": "separation"
+    }
+  ],
+  "next_cursor": "2026-05-20T18:42:00.000Z"
+}
+```
+
+## Paginating
+
+```bash
+# Page 1
+curl "https://app.moisi.app/api/v1/separations?limit=20" \
+  -H "Authorization: Bearer mk_live_…"
+
+# Page 2 — pass back the cursor from page 1
+curl "https://app.moisi.app/api/v1/separations?limit=20&cursor=2026-05-20T18:42:00.000Z" \
+  -H "Authorization: Bearer mk_live_…"
+```
+
+Keep going until `next_cursor === null`.

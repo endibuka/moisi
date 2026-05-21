@@ -1,6 +1,7 @@
 export type StemName =
   | "vocals"
   | "vocals_acapella"
+  | "instrumental"
   | "drums"
   | "bass"
   | "guitar"
@@ -8,6 +9,8 @@ export type StemName =
   | "other";
 
 export type JobStatus = "pending" | "processing" | "completed" | "failed";
+
+export type JobType = "separation" | "vocal_isolation" | "music_generation";
 
 // Jobs run before the 6-stem rollout only have {vocals, drums, bass, other},
 // so consumers must tolerate missing keys.
@@ -46,6 +49,7 @@ export const STEM_NAMES: StemName[] = [
 export const STEM_LABELS: Record<StemName, string> = {
   vocals: "Vocals",
   vocals_acapella: "Studio Acapella",
+  instrumental: "Instrumental",
   drums: "Drums",
   bass: "Bass",
   guitar: "Guitar",

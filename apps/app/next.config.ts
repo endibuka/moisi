@@ -9,10 +9,10 @@ const nextConfig: NextConfig = {
   experimental: {
     // Persist Turbopack's work to .next between dev sessions for faster boots.
     turbopackFileSystemCacheForDev: true,
-    // Enable the browser View Transitions API for App Router navigations —
-    // gives us a free crossfade between routes (e.g. switching chats from the
-    // sidebar) with no JS-driven animation work.
-    viewTransition: true,
+    // Route transitions are handled by framer-motion's AnimatePresence in
+    // PageTransition.tsx — disable Next's built-in viewTransition so the two
+    // don't fight (browser crossfade + motion.div animation = double swap).
+    viewTransition: false,
   },
   // ADK + its OpenTelemetry/GCP/MikroORM/MCP deps don't bundle cleanly through
   // Next's server compilation; keep them as require()-from-node_modules.

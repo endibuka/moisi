@@ -1,0 +1,87 @@
+---
+title: Create upload URL
+description: Get a short-lived signed URL the client uploads audio directly to.
+api: POST /v1/uploads
+---
+
+Returns a signed URL the client uses to upload audio directly to storage,
+plus the resulting `path` to pass on to
+[POST /v1/separations](/endpoints/separations/create). Bytes go straight
+to object storage — they don't pass through Moises servers.
+
+## Request
+
+### Headers
+
+| Name | Required | Value |
+| --- | --- | --- |
+| `Authorization` | yes | `Bearer mk_live_…` |
+| `Content-Type` | yes | `application/json` |
+
+### Body
+
+<ParamField body="filename" type="string" required>
+  The original filename. Used for storage path generation and for display
+  later (so the user recognizes their upload). Spaces and special chars
+  are normalized; the original name is preserved on the separation row.
+</ParamField>
+
+## Response
+
+<ResponseField name="path" type="string">
+  Storage path of the uploaded file. Pass this to
+  [POST /v1/separations](/endpoints/separations/create) as `inputPath`.
+</ResponseField>
+
+<ResponseField name="uploadUrl" type="string">
+  Signed URL to `PUT` the audio bytes to. Single-use, expires in 1 hour.
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  The Supabase Storage upload token. Most clients can ignore this — it's
+  baked into `uploadUrl`. Exposed in case you use the Supabase JS SDK
+  with `uploadToSignedUrl(token, …)`.
+</ResponseField>
+
+<ResponseField name="expiresAt" type="string (ISO 8601)">
+  When the upload URL stops accepting writes.
+</ResponseField>
+
+## Example
+
+```bash
+curl https://app.moisi.app/api/v1/uploads \
+  -H "Authorization: Bearer mk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{"filename": "song.mp3"}'
+```
+
+```json
+{
+  "path": "8f3a…/01HF…/song.mp3",
+  "uploadUrl": "https://…storage.supabase.co/object/upload/sign/uploads/…",
+  "token": "…",
+  "expiresAt": "2026-05-21T10:00:00.000Z"
+}
+```
+
+## Uploading
+
+Once you have `uploadUrl`, `PUT` the file bytes:
+
+```bash
+curl -X PUT "$uploadUrl" \
+  -H "Content-Type: audio/mpeg" \
+  --data-binary "@song.mp3"
+```
+
+Set `Content-Type` to the file's MIME type (`audio/mpeg`, `audio/wav`,
+`audio/mp4`, `audio/flac`, `audio/aac`, `audio/ogg`).
+
+## Errors
+
+| Code | When |
+| --- | --- |
+| `missing_api_key` / `invalid_api_key` | Auth header missing or wrong. |
+| `invalid_request` | `filename` missing or empty. |
+| `internal_error` | Storage couldn't mint a signed URL. Retry. |

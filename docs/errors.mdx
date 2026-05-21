@@ -1,0 +1,56 @@
+---
+title: Errors
+description: Error envelope, codes, and HTTP statuses returned by the Moises API.
+---
+
+The API returns standard HTTP status codes and a JSON envelope so you
+can switch on a stable `code` field.
+
+## Envelope
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "`inputPath` is required."
+  }
+}
+```
+
+- **`code`** — machine-readable, stable. Safe to switch on.
+- **`message`** — human-readable, may change wording over time. Show to
+  end users only after translating if your app is localized.
+
+## Codes
+
+| HTTP | Code | When it happens |
+| --- | --- | --- |
+| 400 | `invalid_request` | A required field is missing, malformed, or an enum value is unrecognized. |
+| 401 | `missing_api_key` | No `Authorization` or `X-Api-Key` header was sent. |
+| 401 | `invalid_api_key` | The key is malformed or doesn't match a known key. |
+| 401 | `revoked_api_key` | The key was valid once but has been revoked in Settings. |
+| 403 | `forbidden` | You're authenticated but the resource doesn't belong to you. |
+| 404 | `not_found` | The id doesn't exist (or belongs to another account). |
+| 500 | `internal_error` | Something broke on our end. Retry with backoff; if it persists, contact support. |
+
+<Note>
+  `404` is returned for both "doesn't exist" and "belongs to someone
+  else" — we don't leak which is which.
+</Note>
+
+## Job-level failures
+
+A separation job can succeed (HTTP 200) but still end up `status: "failed"`
+internally. Always inspect the `status` field in the job response, not
+just the HTTP code:
+
+```json
+{
+  "id": "01HF…",
+  "status": "failed",
+  "error": "Audio file is corrupted.",
+  …
+}
+```
+
+When `status === "failed"`, the `error` string explains why.

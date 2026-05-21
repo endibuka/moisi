@@ -9,6 +9,7 @@ import {
   deleteMuseConversation,
   fetchMuseConversation,
   fetchMuseConversations,
+  renameMuseConversation,
 } from "@/app/(dashboard)/muse/actions";
 import type { MuseConversationSummary } from "@/lib/muse/conversations";
 import { museKeys } from "@/lib/muse/keys";
@@ -45,6 +46,36 @@ export function usePrefetchConversation() {
       staleTime: 60 * 1000,
     });
   };
+}
+
+/**
+ * Rename with optimistic update — the new title shows up in the sidebar
+ * before the server confirms; rollback on error.
+ */
+export function useRenameConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      renameMuseConversation(id, title),
+    onMutate: async ({ id, title }) => {
+      await qc.cancelQueries({ queryKey: museKeys.conversations() });
+      const prev = qc.getQueryData<MuseConversationSummary[]>(
+        museKeys.conversations(),
+      );
+      qc.setQueryData<MuseConversationSummary[]>(
+        museKeys.conversations(),
+        (old) =>
+          (old ?? []).map((c) => (c.id === id ? { ...c, title } : c)),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(museKeys.conversations(), ctx.prev);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: museKeys.conversations() });
+    },
+  });
 }
 
 /**

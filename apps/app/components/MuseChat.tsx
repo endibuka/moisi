@@ -1,11 +1,28 @@
 "use client";
 
+import {
+  ArrowUp,
+  BookOpen,
+  DotsThree,
+  type Icon,
+  Microphone,
+  MusicNote,
+  MusicNotes,
+  PencilSimple,
+  Plus,
+  SlidersHorizontal,
+  Sparkle,
+  Waveform,
+  X,
+} from "@phosphor-icons/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import MuseMarkdown from "@/components/MuseMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { museKeys } from "@/lib/muse/hooks";
+import type { MuseMessage } from "@/lib/muse/conversations";
+import { useConversation } from "@/lib/muse/hooks";
+import { museKeys } from "@/lib/muse/keys";
 import { ACCEPTED_AUDIO_EXT, MAX_UPLOAD_BYTES } from "@/lib/separation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -24,114 +41,12 @@ type Attachment = {
   durationSeconds: number | null;
 };
 
-function IconSparkle({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2.5 13.7 8 19 9.7 13.7 11.4 12 17l-1.7-5.6L5 9.7 10.3 8 12 2.5Z" />
-      <path d="M19 14.5 19.9 17 22.5 18l-2.6 1L19 21.5 18.1 19 15.5 18l2.6-1L19 14.5Z" opacity="0.7" />
-    </svg>
-  );
-}
-
-function IconArrowUp({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 19V5M5 12l7-7 7 7" />
-    </svg>
-  );
-}
-
-function IconPlus({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
-function IconWave({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2M21 12h0" />
-    </svg>
-  );
-}
-
-function IconMic({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="2" width="6" height="11" rx="3" />
-      <path d="M5 11a7 7 0 0 0 14 0M12 18v4" />
-    </svg>
-  );
-}
-
-function IconStems({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-  );
-}
-
-function IconNote({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 18V5l12-2v13" />
-      <circle cx="6" cy="18" r="3" />
-      <circle cx="18" cy="16" r="3" />
-    </svg>
-  );
-}
-
-function IconPen({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-    </svg>
-  );
-}
-
-function IconSliders({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" />
-    </svg>
-  );
-}
-
-function IconBook({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20" />
-    </svg>
-  );
-}
-
-function IconMore({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="5" cy="12" r="1.6" />
-      <circle cx="12" cy="12" r="1.6" />
-      <circle cx="19" cy="12" r="1.6" />
-    </svg>
-  );
-}
-
-function IconClose({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 6l12 12M18 6 6 18" />
-    </svg>
-  );
-}
-
-const SUGGESTIONS: { label: string; prompt: string; Icon: (p: { className?: string }) => React.JSX.Element }[] = [
-  { label: "Write lyrics", prompt: "Help me write lyrics for a song about late-night drives.", Icon: IconPen },
-  { label: "Chord ideas", prompt: "Suggest chord progressions for a dreamy indie-pop track in A major.", Icon: IconNote },
-  { label: "Mixing tips", prompt: "Give me mixing tips for vocals sitting on top of a busy drum bus.", Icon: IconSliders },
-  { label: "Music theory", prompt: "Explain modal interchange in C major with a couple of examples.", Icon: IconBook },
-  { label: "More", prompt: "", Icon: IconMore },
+const SUGGESTIONS: { label: string; prompt: string; Icon: Icon }[] = [
+  { label: "Write lyrics", prompt: "Help me write lyrics for a song about late-night drives.", Icon: PencilSimple },
+  { label: "Chord ideas", prompt: "Suggest chord progressions for a dreamy indie-pop track in A major.", Icon: MusicNote },
+  { label: "Mixing tips", prompt: "Give me mixing tips for vocals sitting on top of a busy drum bus.", Icon: SlidersHorizontal },
+  { label: "Music theory", prompt: "Explain modal interchange in C major with a couple of examples.", Icon: BookOpen },
+  { label: "More", prompt: "", Icon: DotsThree },
 ];
 
 function readDuration(file: File): Promise<number | null> {
@@ -154,25 +69,31 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export type ServerMessage = {
-  id: string;
-  role: "user" | "muse";
-  content: string;
-  attachment_path: string | null;
-  attachment_name: string | null;
-  tool_events:
-    | { name: string; status: "calling" | "done" | "error"; message?: string }[]
-    | null;
-};
+/** Convert a persisted server message into the local UI shape. */
+function toClientMessage(m: MuseMessage): Message {
+  return {
+    id: m.id,
+    role: m.role,
+    // User messages have a trailing `[attached audio | …]` metadata block we
+    // append before sending to Gemini — strip it so the bubble shows clean
+    // text only.
+    text:
+      m.role === "user"
+        ? m.content.replace(/\n*\[attached audio \|[^\]]*\]/g, "").trim() ||
+          m.content
+        : m.content,
+    attachment: m.attachment_name ? { originalName: m.attachment_name } : null,
+    toolEvents: m.tool_events ?? [],
+    pending: false,
+  };
+}
 
 export default function MuseChat({
   userId,
   conversationId: serverConversationId,
-  initialMessages = [],
 }: {
   userId: string;
   conversationId?: string;
-  initialMessages?: ServerMessage[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -201,7 +122,6 @@ export default function MuseChat({
       key={conversationId}
       userId={userId}
       conversationId={conversationId}
-      initialMessages={initialMessages}
     />
   );
 }
@@ -209,31 +129,40 @@ export default function MuseChat({
 function MuseChatInner({
   userId,
   conversationId,
-  initialMessages,
 }: {
   userId: string;
   conversationId: string;
-  initialMessages: ServerMessage[];
 }) {
   const supabase = useMemo(() => createClient(), []);
   const queryClient = useQueryClient();
-  const [messages, setMessages] = useState<Message[]>(() =>
-    initialMessages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      // The user message stored server-side includes the attachment metadata
-      // footer we append before sending to Gemini. Strip it before showing.
-      text:
-        m.role === "user"
-          ? m.content.replace(/\n*\[attached audio \|[^\]]*\]/g, "").trim() ||
-            m.content
-          : m.content,
-      attachment: m.attachment_name
-        ? { originalName: m.attachment_name }
-        : null,
-      toolEvents: m.tool_events ?? [],
-      pending: false,
-    })),
+
+  // Source of truth for past messages: TanStack Query. Cache is IDB-backed
+  // (see QueryProvider) so previously-opened chats render from local storage
+  // before the server even responds. Background revalidation keeps it fresh.
+  const { data: conversation } = useConversation(conversationId);
+  const cachedMessages = conversation?.messages;
+
+  // Derived-state pattern: when the user hasn't mutated locally yet, the
+  // displayed list is computed from cached data; once they send / receive a
+  // message, `override` takes precedence so cache invalidations don't clobber
+  // the live session. No setState-in-effect needed — works for both cold
+  // (cache populates later) and warm (cache hit on first render) cases.
+  const [override, setOverride] = useState<Message[] | null>(null);
+  const messages = useMemo<Message[]>(
+    () => override ?? (cachedMessages ?? []).map(toClientMessage),
+    [override, cachedMessages],
+  );
+
+  const setMessages = useCallback(
+    (next: Message[] | ((prev: Message[]) => Message[])) => {
+      setOverride((prev) => {
+        const base = prev ?? (cachedMessages ?? []).map(toClientMessage);
+        return typeof next === "function"
+          ? (next as (p: Message[]) => Message[])(base)
+          : next;
+      });
+    },
+    [cachedMessages],
   );
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -318,7 +247,7 @@ function MuseChatInner({
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-  }, []);
+  }, [setMessages]);
 
   useEffect(() => {
     if (viewportRef.current) {
@@ -700,7 +629,7 @@ function MuseChatInner({
         {attachment && (
           <div className="flex items-center justify-between gap-2 border-b border-[rgba(252,253,255,0.1)] px-4 py-2.5">
             <div className="flex min-w-0 items-center gap-2.5">
-              <IconStems className="h-3.5 w-3.5 shrink-0 text-[#00dae8]" />
+              <MusicNote weight="fill" className="h-3.5 w-3.5 shrink-0 text-[#00dae8]" />
               <div className="min-w-0">
                 <p className="truncate text-[13px] text-[#fcfcfd]">
                   {attachment.originalName}
@@ -716,7 +645,7 @@ function MuseChatInner({
               aria-label="Remove attachment"
               className="flex size-7 items-center justify-center rounded-full text-[rgba(252,252,253,0.6)] transition-colors hover:bg-white/5 hover:text-white"
             >
-              <IconClose />
+              <X weight="bold" className="h-3.5 w-3.5 shrink-0" />
             </button>
           </div>
         )}
@@ -749,7 +678,7 @@ function MuseChatInner({
               {uploading ? (
                 <span className="size-3.5 animate-spin rounded-full border-2 border-[rgba(241,247,254,0.3)] border-t-[#edeef0]" />
               ) : (
-                <IconPlus />
+                <Plus weight="bold" className="h-4 w-4" />
               )}
             </ToolbarButton>
             <ToolbarButton
@@ -761,7 +690,7 @@ function MuseChatInner({
               {recording ? (
                 <span className="size-2.5 animate-pulse rounded-full bg-[#ff5d5d]" />
               ) : (
-                <IconWave />
+                <Waveform weight="fill" className="h-4 w-4" />
               )}
             </ToolbarButton>
             <button
@@ -770,7 +699,7 @@ function MuseChatInner({
               disabled={uploading || streaming}
               className="ml-1 flex items-center gap-1.5 rounded-full border border-[rgba(252,253,255,0.1)] px-2.5 py-1 text-[12px] text-[rgba(252,252,253,0.6)] transition-colors hover:border-[rgba(252,253,255,0.2)] hover:bg-white/5 hover:text-white disabled:opacity-50"
             >
-              <IconStems className="h-3.5 w-3.5" />
+              <MusicNotes weight="fill" className="h-3.5 w-3.5" />
               <span>Add track</span>
               <span className="text-[10px] font-medium text-[#00dae8]">New</span>
             </button>
@@ -784,7 +713,7 @@ function MuseChatInner({
               {listening ? (
                 <span className="size-2.5 animate-pulse rounded-full bg-[#ff5d5d]" />
               ) : (
-                <IconMic />
+                <Microphone weight="fill" className="h-4 w-4" />
               )}
             </ToolbarButton>
             <button
@@ -796,7 +725,7 @@ function MuseChatInner({
               {streaming ? (
                 <span className="size-3.5 animate-spin rounded-full border-2 border-black/30 border-t-black" />
               ) : (
-                <IconArrowUp className="h-4 w-4" />
+                <ArrowUp weight="bold" className="h-4 w-4" />
               )}
             </button>
           </div>
@@ -837,7 +766,7 @@ function MuseChatInner({
                 onClick={() => s.prompt && void send(s.prompt)}
                 className="flex items-center gap-2 rounded-full border border-[rgba(252,253,255,0.1)] px-3.5 py-2 text-[13px] text-[rgba(252,252,253,0.78)] transition-colors hover:border-[rgba(252,253,255,0.25)] hover:bg-white/5 hover:text-white"
               >
-                <s.Icon className="h-3.5 w-3.5 text-[rgba(252,252,253,0.5)]" />
+                <s.Icon weight="fill" className="h-3.5 w-3.5 text-[rgba(252,252,253,0.5)]" />
                 <span>{s.label}</span>
               </button>
             ))}
@@ -853,7 +782,7 @@ function MuseChatInner({
                     <div className="max-w-[80%]">
                       {m.attachment && (
                         <div className="mb-2 ml-auto flex w-fit items-center gap-2 rounded-full border border-[rgba(252,253,255,0.1)] px-3 py-1.5">
-                          <IconStems className="h-3.5 w-3.5 text-[rgba(252,252,253,0.6)]" />
+                          <MusicNote weight="fill" className="h-3.5 w-3.5 text-[rgba(252,252,253,0.6)]" />
                           <span className="text-[12px] text-[rgba(252,252,253,0.85)]">
                             {m.attachment.originalName}
                           </span>
@@ -867,9 +796,9 @@ function MuseChatInner({
                 ) : (
                   <div key={m.id} className="flex items-start gap-3">
                     <span className="mt-[3px] flex size-6 shrink-0 items-center justify-center rounded-full bg-[#00dae8] text-[#001316]">
-                      <IconSparkle className="h-3 w-3" />
+                      <Sparkle weight="fill" className="h-3 w-3" />
                     </span>
-                    <div className="flex-1 space-y-2 pt-[2px] text-[14px] leading-[1.65] text-[rgba(252,252,253,0.92)]">
+                    <div className="min-w-0 flex-1 space-y-2 pt-[2px] text-[14px] leading-[1.65] text-[rgba(252,252,253,0.92)]">
                       {(m.toolEvents ?? []).map((ev, i) => (
                         <div
                           key={`${ev.name}-${i}`}

@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { inngest } from "@/lib/inngest/client";
 import type { StemName } from "@/lib/separation";
 
+// Mirror of separation-service: music_generation has its own flow.
+type StemSplitJobType = "separation" | "vocal_isolation";
+
 type StartResult = { jobId?: string; error?: string };
 
 /**
@@ -45,6 +48,7 @@ export async function startSeparation(
   inputPath: string,
   originalName: string,
   durationSeconds: number | null = null,
+  jobType: StemSplitJobType = "separation",
 ): Promise<StartResult> {
   const supabase = await createClient();
   const {
@@ -64,6 +68,7 @@ export async function startSeparation(
       original_name: originalName,
       input_path: inputPath,
       duration_seconds: durationSeconds,
+      job_type: jobType,
     })
     .select("id")
     .single();
@@ -90,6 +95,7 @@ export async function startSeparation(
       audio_url: signed.signedUrl,
       output_prefix: `${user.id}/${job.id}`,
       job_id: job.id,
+      job_type: jobType,
     });
 
     await supabase
@@ -114,4 +120,21 @@ export async function startSeparation(
     console.error("RunPod start failed:", err);
     return fail("Could not start the GPU separation job.");
   }
+}
+
+/**
+ * Vocal Isolator + Karaoke share the same 2-stem fast path. Thin wrapper so
+ * the calling UIs don't need to know about the underlying job_type plumbing.
+ */
+export async function startVocalIsolation(
+  inputPath: string,
+  originalName: string,
+  durationSeconds: number | null = null,
+): Promise<StartResult> {
+  return startSeparation(
+    inputPath,
+    originalName,
+    durationSeconds,
+    "vocal_isolation",
+  );
 }

@@ -1,4 +1,5 @@
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
+import PageTransition from "@/components/PageTransition";
 import QueryProvider from "@/components/QueryProvider";
 import Sidebar, { type SidebarJob } from "@/components/Sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -54,7 +55,9 @@ export default async function DashboardLayout({
             recentJobs={(recentJobs as SidebarJob[]) ?? []}
           />
           <main className="relative flex-1 overflow-hidden">
-            <ScrollArea className="h-full">{children}</ScrollArea>
+            <ScrollArea className="h-full">
+              <PageTransition>{children}</PageTransition>
+            </ScrollArea>
           </main>
         </div>
       </HydrationBoundary>

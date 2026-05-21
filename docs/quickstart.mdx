@@ -1,0 +1,147 @@
+---
+title: Quickstart
+description: From zero to a separated track in under five minutes.
+---
+
+This walkthrough takes a local audio file and returns signed URLs for
+every separated stem. Three round-trips plus a direct upload to storage.
+
+## Prerequisites
+
+- A Moises account
+- An API key (see [Authentication](/authentication))
+- An audio file under 30 MB (`.mp3`, `.wav`, `.m4a`, `.flac`, `.aac`, `.ogg`)
+
+## End-to-end script
+
+The following script does all three steps:
+
+<CodeGroup>
+```bash bash
+KEY="mk_live_…"
+FILE="./song.mp3"
+NAME="song.mp3"
+
+# 1. Ask for a signed upload URL.
+UPLOAD=$(curl -sS https://app.moisi.app/api/v1/uploads \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"filename\":\"$NAME\"}")
+
+PATH_=$(echo "$UPLOAD" | jq -r '.path')
+URL=$(echo "$UPLOAD" | jq -r '.uploadUrl')
+
+# 2. Upload the file directly to storage.
+curl -sS -X PUT "$URL" \
+  -H "Content-Type: audio/mpeg" \
+  --data-binary "@$FILE"
+
+# 3. Start a separation job.
+JOB=$(curl -sS https://app.moisi.app/api/v1/separations \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"inputPath\":\"$PATH_\",\"originalName\":\"$NAME\"}")
+
+JOB_ID=$(echo "$JOB" | jq -r '.id')
+echo "Job queued: $JOB_ID"
+
+# 4. Poll until completed.
+while true; do
+  STATUS=$(curl -sS "https://app.moisi.app/api/v1/separations/$JOB_ID" \
+    -H "Authorization: Bearer $KEY" | jq -r '.status')
+  echo "  status: $STATUS"
+  [ "$STATUS" = "completed" ] && break
+  [ "$STATUS" = "failed" ] && exit 1
+  sleep 3
+done
+
+# 5. Print the stem URLs.
+curl -sS "https://app.moisi.app/api/v1/separations/$JOB_ID" \
+  -H "Authorization: Bearer $KEY" | jq '.stem_urls'
+```
+
+```javascript node
+const KEY = process.env.MOISES_KEY!;
+const FILE = "./song.mp3";
+const NAME = "song.mp3";
+
+const base = "https://app.moisi.app/api/v1";
+const headers = { Authorization: `Bearer ${KEY}` };
+
+// 1. Signed upload URL.
+const upload = await fetch(`${base}/uploads`, {
+  method: "POST",
+  headers: { ...headers, "Content-Type": "application/json" },
+  body: JSON.stringify({ filename: NAME }),
+}).then((r) => r.json());
+
+// 2. Direct upload.
+const { readFile } = await import("node:fs/promises");
+await fetch(upload.uploadUrl, {
+  method: "PUT",
+  headers: { "Content-Type": "audio/mpeg" },
+  body: await readFile(FILE),
+});
+
+// 3. Start the job.
+const job = await fetch(`${base}/separations`, {
+  method: "POST",
+  headers: { ...headers, "Content-Type": "application/json" },
+  body: JSON.stringify({ inputPath: upload.path, originalName: NAME }),
+}).then((r) => r.json());
+
+console.log("Job queued:", job.id);
+
+// 4. Poll.
+let status = job.status;
+while (status !== "completed" && status !== "failed") {
+  await new Promise((r) => setTimeout(r, 3000));
+  const next = await fetch(`${base}/separations/${job.id}`, { headers })
+    .then((r) => r.json());
+  status = next.status;
+  console.log("  status:", status);
+  if (status === "completed") console.log(next.stem_urls);
+}
+```
+</CodeGroup>
+
+## What you get back
+
+When the job finishes, `GET /v1/separations/{id}` returns:
+
+```json
+{
+  "id": "01HF…",
+  "status": "completed",
+  "original_name": "song.mp3",
+  "stems": {
+    "vocals": "<path-in-stems-bucket>",
+    "drums": "<path>",
+    "bass": "<path>",
+    "guitar": "<path>",
+    "piano": "<path>",
+    "other": "<path>"
+  },
+  "stem_urls": {
+    "vocals": "https://…signed-1h-url…",
+    "drums": "https://…",
+    "bass": "https://…",
+    "guitar": "https://…",
+    "piano": "https://…",
+    "other": "https://…"
+  },
+  "duration_seconds": 187.3,
+  "created_at": "…",
+  "updated_at": "…",
+  "job_type": "separation"
+}
+```
+
+The signed URLs are good for one hour. If you need them for longer, just
+call `GET /v1/separations/{id}` again to mint fresh ones.
+
+## Next steps
+
+- [Errors](/errors) — what to do when something goes wrong
+- [POST /v1/separations](/endpoints/separations/create) — full request schema
+- [GET /v1/separations](/endpoints/separations/list) — paginate your job history

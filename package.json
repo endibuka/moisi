@@ -2,13 +2,14 @@
   "name": "moisi",
   "version": "0.1.0",
   "private": true,
-  "description": "Monorepo: apps/app (dashboard, port 3000) + apps/web (marketing, port 3001).",
+  "description": "Monorepo: apps/app (dashboard, 3000) + apps/web (marketing, 3001) + apps/mcp (MCP server, 3002).",
   "scripts": {
-    "dev": "concurrently -n app,web,inngest -c cyan,magenta,yellow \"npm --prefix apps/app run dev\" \"npm --prefix apps/web run dev\" \"npx --yes inngest-cli@latest dev -u http://localhost:3000/api/inngest\"",
+    "dev": "concurrently -n app,web,mcp,inngest -c cyan,magenta,green,yellow \"npm --prefix apps/app run dev\" \"npm --prefix apps/web run dev\" \"npm --prefix apps/mcp run dev\" \"npx --yes inngest-cli@latest dev -u http://localhost:3000/api/inngest\"",
     "dev:app": "npm --prefix apps/app run dev",
     "dev:web": "npm --prefix apps/web run dev",
+    "dev:mcp": "npm --prefix apps/mcp run dev",
     "dev:inngest": "npx --yes inngest-cli@latest dev -u http://localhost:3000/api/inngest",
-    "build": "npm --prefix apps/app run build && npm --prefix apps/web run build"
+    "build": "npm --prefix apps/app run build && npm --prefix apps/web run build && npm --prefix apps/mcp run build"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

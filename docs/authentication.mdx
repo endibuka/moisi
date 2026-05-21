@@ -1,0 +1,74 @@
+---
+title: Authentication
+description: Mint and use API keys for the Moises API.
+---
+
+All API requests authenticate with a personal API key. Keys are
+per-user — anything you can do in the Moises dashboard, your key can do
+via the API.
+
+## Get a key
+
+<Steps>
+  <Step title="Open Settings">
+    In the Moises dashboard, click your avatar and choose **Settings**.
+  </Step>
+  <Step title="Go to the API tab">
+    Click **API** in the sidebar.
+  </Step>
+  <Step title="Create a key">
+    Click **+ Create new key**, give it a name (e.g. "Production server"),
+    and confirm.
+  </Step>
+  <Step title="Save it immediately">
+    The full key is shown **once**. Copy it now — you won't see it again.
+  </Step>
+</Steps>
+
+<Warning>
+  Treat API keys like passwords. Anyone who has the key can act on your
+  behalf. If you suspect a key has leaked, revoke it from Settings → API.
+</Warning>
+
+## Key format
+
+```
+mk_live_<64 hex chars>
+```
+
+The `mk_live_` prefix never changes. The 64 hex chars are 32 random
+bytes — high enough entropy that we store only a SHA-256 hash on our
+side; the plaintext exists only in your possession.
+
+## Send the key
+
+Pass the key on every request as a Bearer token:
+
+```bash
+curl https://app.moisi.app/api/v1/separations \
+  -H "Authorization: Bearer mk_live_…"
+```
+
+If your HTTP client doesn't play nicely with `Authorization`, the
+`X-Api-Key` header is also accepted:
+
+```bash
+curl https://app.moisi.app/api/v1/separations \
+  -H "X-Api-Key: mk_live_…"
+```
+
+## Revoking a key
+
+In **Settings → API**, click **Revoke** next to the key. It stops
+working immediately. The row stays in the list as "Revoked" for audit
+purposes — you can't un-revoke; create a new key instead.
+
+## Error responses
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `missing_api_key` | 401 | No `Authorization` / `X-Api-Key` header. |
+| `invalid_api_key` | 401 | Header present but the key is malformed or unknown. |
+| `revoked_api_key` | 401 | The key was valid once but has been revoked. |
+
+See [Errors](/errors) for the full list.

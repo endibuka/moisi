@@ -1,0 +1,76 @@
+---
+title: Introduction
+description: Programmatic stem separation, vocal isolation, and music tooling for your own apps.
+---
+
+The Moises API lets you separate audio tracks into stems (vocals, drums,
+bass, guitar, piano, other), isolate vocals, and process audio
+programmatically — the same engine that powers the Moises dashboard,
+exposed as REST.
+
+## Base URL
+
+All endpoints are served under:
+
+```
+https://app.moisi.app/api/v1
+```
+
+If you're self-hosting or pointing at a different deploy, swap the host
+accordingly. The path prefix (`/api/v1`) is stable.
+
+## Authentication
+
+Every request requires an API key generated from your Moises dashboard.
+Pass it as a Bearer token:
+
+```
+Authorization: Bearer mk_live_…
+```
+
+See [Authentication](/authentication) for how to mint and rotate keys.
+
+## How it works
+
+A typical track-separation flow takes three calls:
+
+<Steps>
+  <Step title="Get a signed upload URL">
+    `POST /v1/uploads` returns a short-lived URL and a storage `path`.
+  </Step>
+  <Step title="Upload your audio">
+    `PUT` the audio file directly to the upload URL. Bytes never touch
+    Moises servers — they go straight to object storage.
+  </Step>
+  <Step title="Start the separation">
+    `POST /v1/separations` with the `path` from step 1. Moises queues the
+    job on GPU workers and returns a job id.
+  </Step>
+  <Step title="Poll until done">
+    `GET /v1/separations/{id}` until `status === "completed"`. The
+    response then includes signed download URLs for each stem.
+  </Step>
+</Steps>
+
+See [Quickstart](/quickstart) for a copy-pasteable example.
+
+## Response format
+
+All responses are JSON. Errors share a consistent envelope:
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "`inputPath` is required."
+  }
+}
+```
+
+The full code list lives in [Errors](/errors).
+
+## Rate limits
+
+Live keys are billed per processed minute. We don't currently rate-limit
+requests, but please be considerate — polling a job's status more than
+once every 2 seconds is wasteful and might get throttled in the future.

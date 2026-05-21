@@ -1,6 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  type ApiKeySummary,
+  createApiKey,
+  listApiKeys,
+  revokeApiKey,
+} from "@/app/actions/api-keys";
 import Modal from "./Modal";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -392,6 +398,82 @@ function BillingTab() {
 }
 
 function ApiTab() {
+  const [keys, setKeys] = useState<ApiKeySummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [justCreated, setJustCreated] = useState<{
+    plaintext: string;
+    lastChars: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setKeys(await listApiKeys());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    // One-time fetch on mount — alternatives (TanStack Query, ref-derived
+    // state) are overkill for a single settings tab; suppressing the
+    // set-state-in-effect rule here is the lesser cost.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  const onCreate = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    setCreating(true);
+    setError(null);
+    const result = await createApiKey(trimmed);
+    setCreating(false);
+    if ("error" in result) {
+      setError(result.error);
+      return;
+    }
+    setJustCreated({
+      plaintext: result.key.plaintext,
+      lastChars: result.key.lastChars,
+    });
+    setNewName("");
+    setCreateOpen(false);
+    void load();
+  };
+
+  const onRevoke = async (id: string) => {
+    setRevoking(id);
+    await revokeApiKey(id);
+    setRevoking(null);
+    void load();
+  };
+
+  const copyPlaintext = async () => {
+    if (!justCreated) return;
+    try {
+      await navigator.clipboard.writeText(justCreated.plaintext);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard unavailable
+    }
+  };
+
+  // Stripe-style display: prefix + bullets + last 4. Inlined here so the UI
+  // doesn't have to pull from a server-only module.
+  const masked = (lastChars: string) =>
+    `mk_live_${"•".repeat(24)}${lastChars}`;
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+
   return (
     <>
       <TabHeader
@@ -399,41 +481,156 @@ function ApiTab() {
         subtitle="Programmatic access to your tracks and separations."
       />
 
-      <Section
-        title="Endpoint"
-        description="Base URL for the Moisi API."
-      >
-        <Input value="https://api.moisi.app/v1" readOnly />
+      <Section title="Endpoint" description="Base URL for the Moisi API.">
+        <Input value="/api/v1" readOnly />
       </Section>
+
+      {justCreated && (
+        <Section
+          title="Your new API key"
+          description="This is the only time we'll show the full key. Save it somewhere safe."
+        >
+          <div className="rounded-[12px] border border-[rgba(0,218,232,0.3)] bg-[rgba(0,218,232,0.06)] p-4">
+            <p className="break-all font-mono text-[12.5px] leading-relaxed text-[#fcfcfd]">
+              {justCreated.plaintext}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <PillButton onClick={copyPlaintext}>
+                {copied ? "Copied" : "Copy"}
+              </PillButton>
+              <PillButton
+                variant="primary"
+                onClick={() => setJustCreated(null)}
+              >
+                I&apos;ve saved it
+              </PillButton>
+            </div>
+          </div>
+        </Section>
+      )}
 
       <Section
         title="API keys"
         description="Keys give full access to your account. Treat them like passwords."
       >
-        <div className="rounded-[10px] border border-[rgba(252,252,253,0.06)] bg-[rgba(252,252,253,0.02)] p-4">
-          <RowBetween>
-            <div>
-              <p className="text-[13px] text-[#fcfcfd]">Default</p>
-              <p className="mt-0.5 font-mono text-[12px] tabular-nums text-[rgba(252,252,253,0.6)]">
-                mk_live_••••••••••••••••••••••••••a3f1
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <PillButton>Reveal</PillButton>
-              <PillButton variant="danger">Revoke</PillButton>
-            </div>
-          </RowBetween>
-        </div>
-        <div className="mt-3">
-          <PillButton variant="primary">+ Create new key</PillButton>
-        </div>
+        {loading ? (
+          <p className="text-[12px] text-[rgba(252,252,253,0.5)]">Loading…</p>
+        ) : keys.length === 0 ? (
+          <p className="text-[12px] text-[rgba(252,252,253,0.5)]">
+            No keys yet. Create one to start hitting the API.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {keys.map((key) => {
+              const revoked = !!key.revoked_at;
+              return (
+                <div
+                  key={key.id}
+                  className={`rounded-[10px] border p-4 transition-opacity ${
+                    revoked
+                      ? "border-[rgba(252,252,253,0.04)] bg-[rgba(252,252,253,0.01)] opacity-60"
+                      : "border-[rgba(252,252,253,0.06)] bg-[rgba(252,252,253,0.02)]"
+                  }`}
+                >
+                  <RowBetween>
+                    <div className="min-w-0">
+                      <p className="text-[13px] text-[#fcfcfd]">
+                        {key.name}
+                        {revoked && (
+                          <span className="ml-2 text-[11px] font-medium uppercase tracking-wide text-[rgba(252,252,253,0.4)]">
+                            Revoked
+                          </span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 font-mono text-[12px] tabular-nums text-[rgba(252,252,253,0.6)]">
+                        {masked(key.last_chars)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-[rgba(252,252,253,0.4)]">
+                        Created {fmtDate(key.created_at)} ·{" "}
+                        {key.last_used_at
+                          ? `last used ${fmtDate(key.last_used_at)}`
+                          : "never used"}
+                      </p>
+                    </div>
+                    {!revoked && (
+                      <PillButton
+                        variant="danger"
+                        onClick={() => onRevoke(key.id)}
+                      >
+                        {revoking === key.id ? "Revoking…" : "Revoke"}
+                      </PillButton>
+                    )}
+                  </RowBetween>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {createOpen ? (
+          <div className="mt-3 flex gap-2">
+            <input
+              autoFocus
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void onCreate();
+                if (e.key === "Escape") {
+                  setCreateOpen(false);
+                  setNewName("");
+                }
+              }}
+              placeholder="e.g. Production server"
+              maxLength={80}
+              className="h-9 flex-1 rounded-full border border-[rgba(252,252,253,0.1)] bg-[rgba(252,252,253,0.03)] px-3 text-[13px] text-[#fcfcfd] outline-none placeholder:text-[rgba(252,252,253,0.3)] focus:border-[rgba(252,252,253,0.25)]"
+            />
+            <PillButton variant="primary" onClick={onCreate}>
+              {creating ? "Creating…" : "Create"}
+            </PillButton>
+            <PillButton
+              onClick={() => {
+                setCreateOpen(false);
+                setNewName("");
+                setError(null);
+              }}
+            >
+              Cancel
+            </PillButton>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <PillButton
+              variant="primary"
+              onClick={() => setCreateOpen(true)}
+            >
+              + Create new key
+            </PillButton>
+          </div>
+        )}
+
+        {error && (
+          <p className="mt-2 text-[12px] text-[#ff8a8a]">{error}</p>
+        )}
       </Section>
 
       <Section title="Quick start">
         <pre className="overflow-x-auto rounded-[8px] border border-[rgba(252,252,253,0.06)] bg-[#000] p-3 text-[12px] leading-relaxed text-[rgba(252,252,253,0.85)]">
-{`curl -X POST https://api.moisi.app/v1/separate \\
+{`# 1. Get a signed upload URL
+curl -X POST /api/v1/uploads \\
   -H "Authorization: Bearer mk_live_…" \\
-  -F "audio=@song.mp3"`}
+  -H "Content-Type: application/json" \\
+  -d '{"filename":"song.mp3"}'
+
+# 2. PUT your audio to the returned uploadUrl, then:
+curl -X POST /api/v1/separations \\
+  -H "Authorization: Bearer mk_live_…" \\
+  -H "Content-Type: application/json" \\
+  -d '{"inputPath":"<path from step 1>","originalName":"song.mp3"}'
+
+# 3. Poll the job until status === "completed"
+curl /api/v1/separations/<id> \\
+  -H "Authorization: Bearer mk_live_…"`}
         </pre>
       </Section>
     </>
