@@ -5,17 +5,17 @@
 #   2. Event: push to branch `^main$`.
 #   3. Configuration: Cloud Build configuration file → `apps/app/cloudbuild.yaml`.
 #   4. Under "Advanced → Substitution variables", set:
-#        _NEXT_PUBLIC_SUPABASE_URL       = https://<project>.supabase.co
-#        _NEXT_PUBLIC_SUPABASE_ANON_KEY  = <anon / publishable key>
-#        _REGION  (optional)             = europe-west1
-#        _REPO    (optional)             = moisi
-#        _SERVICE (optional)             = moisi-app
+#        _NEXT_PUBLIC_SUPABASE_URL              = https://<project>.supabase.co
+#        _NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  = <publishable key from Supabase API page>
+#        _REGION  (optional)                    = europe-west1
+#        _REPO    (optional)                    = moisi
+#        _SERVICE (optional)                    = moisi-app
 #   5. Save. Push to main → Cloud Build builds + deploys automatically.
 #
 # Or one-shot from the CLI:
 #   gcloud builds submit apps/app `
 #     --config=apps/app/cloudbuild.yaml `
-#     --substitutions=_NEXT_PUBLIC_SUPABASE_URL=...,_NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+#     --substitutions=_NEXT_PUBLIC_SUPABASE_URL=...,_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 #
 # NOTE: this file lives inside apps/app/ but the build context Cloud Build
 # uploads is the *repo root* when triggered from GitHub. The `dir:` field on
@@ -26,7 +26,7 @@ substitutions:
   _REPO: moisi
   _SERVICE: moisi-app
   _NEXT_PUBLIC_SUPABASE_URL: ""
-  _NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
+  _NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ""
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -41,7 +41,7 @@ steps:
       - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
       - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest
       - --build-arg=NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
-      - --build-arg=NEXT_PUBLIC_SUPABASE_ANON_KEY=${_NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - --build-arg=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
       - .
 
   - id: docker-push

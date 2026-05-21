@@ -19,10 +19,12 @@ WORKDIR /app
 
 # Build-time NEXT_PUBLIC values — these get baked into the JS bundles served
 # to the browser. Runtime env is set separately in `gcloud run deploy`.
+# Supabase renamed `anon` → `publishable` in their newer API console; this
+# app reads PUBLISHABLE_KEY in lib/supabase/{client,server,proxy}.ts.
 ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
