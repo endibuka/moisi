@@ -28,4 +28,15 @@ export type AppEvents = {
       endpointKind?: RunpodEndpointKind;
     };
   };
+  /**
+   * Fired by the separation watcher right after a music_generation job
+   * completes — kicks off auto-cover-art generation so the user doesn't
+   * have to think about it. Cover failure is non-fatal: the song still
+   * stands without one.
+   */
+  "app/cover.requested": {
+    data: {
+      jobId: string;
+    };
+  };
 };

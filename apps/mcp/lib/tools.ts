@@ -1,3 +1,5 @@
+import { generateCoverArt } from "./cover-art";
+import { generateMusic } from "./music-gen";
 import { startRunpodSeparation } from "./runpod";
 import { createAdminClient } from "./supabase";
 
@@ -205,11 +207,140 @@ const getStemUrl: Tool = {
   },
 };
 
+/* ---- tool: create_cover_art ---- */
+
+const createCoverArt: Tool = {
+  name: "create_cover_art",
+  description:
+    "Generate a square album-cover image with Gemini 2.5 Flash. Two modes: " +
+    "(a) pass `library_job_id` to attach the cover to one of the user's " +
+    "existing tracks (also updates the track's cover_art_path); (b) omit it " +
+    "for a standalone concept cover stored under {user}/muse-covers/. " +
+    "Returns a signed image URL valid for 24h plus the storage path.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      prompt: {
+        type: "string",
+        description:
+          "Visual direction — mood, palette, composition, art style. Don't " +
+          "include the song title (it's added automatically).",
+        minLength: 3,
+        maxLength: 1000,
+      },
+      title: {
+        type: "string",
+        description:
+          "Song title for the cover. Required when library_job_id is absent; " +
+          "ignored when present (uses the linked track's name).",
+      },
+      library_job_id: {
+        type: "string",
+        description:
+          "Optional. ID of an existing track to attach the cover to.",
+      },
+    },
+    required: ["prompt"],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const result = await generateCoverArt({
+      userId: ctx.userId,
+      prompt: String(input.prompt),
+      title: input.title ? String(input.title) : null,
+      libraryJobId: input.library_job_id ? String(input.library_job_id) : null,
+    });
+    if ("error" in result) {
+      throw new Error(result.error);
+    }
+    return {
+      path: result.path,
+      signed_url: result.signedUrl,
+      title: result.title,
+      expires_in: 60 * 60 * 24,
+    };
+  },
+};
+
+/* ---- tool: generate_music ---- */
+
+const generateMusicTool: Tool = {
+  name: "generate_music",
+  description:
+    "Queue a full-song generation on the YuE music-gen worker. Accepts a " +
+    "style/genre prompt and optional structured lyrics (use [verse], " +
+    "[chorus], [bridge] section markers; omit for instrumental). Returns a " +
+    "job_id you can poll with `get_job_status`; the generated MP3 lands at " +
+    "the row's stems.audio path once status='completed'. Cover art is " +
+    "auto-generated on completion using the same style prompt.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      genre: {
+        type: "string",
+        description:
+          "Style / genre prompt, e.g. 'lo-fi piano 80 bpm, soft vinyl crackle'. " +
+          "4-500 chars.",
+        minLength: 4,
+        maxLength: 500,
+      },
+      lyrics: {
+        type: "string",
+        description:
+          "Structured lyrics with [verse]/[chorus]/[bridge] markers on " +
+          "their own lines. Omit or pass empty for instrumental. Max 4000 " +
+          "chars (YuE's input limit).",
+        maxLength: 4000,
+      },
+      n_segments: {
+        type: "integer",
+        description:
+          "How many ~30-second segments to generate (1-6). Default 2 = ~60s.",
+        minimum: 1,
+        maximum: 6,
+      },
+      title: {
+        type: "string",
+        description:
+          "Display name for the resulting library row. Defaults to the " +
+          "first lyric line or a slice of the genre prompt.",
+        maxLength: 80,
+      },
+    },
+    required: ["genre"],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const result = await generateMusic({
+      userId: ctx.userId,
+      genre: String(input.genre),
+      lyrics: input.lyrics ? String(input.lyrics) : undefined,
+      nSegments: input.n_segments ? Number(input.n_segments) : undefined,
+      title: input.title ? String(input.title) : undefined,
+    });
+    if ("error" in result) {
+      throw new Error(result.error);
+    }
+    return {
+      job_id: result.jobId,
+      runpod_id: result.runpodId,
+      status: "processing",
+      estimated_duration_seconds: result.durationEstimate,
+      note:
+        "YuE inference takes 3-10 minutes (longer on first cold start). " +
+        "Poll with get_job_status until status='completed'; the MP3 will " +
+        "be at stems.audio. A cover image is auto-generated and linked.",
+    };
+  },
+};
+
 export const TOOLS: Tool[] = [
   startSeparation,
   listJobs,
   getJobStatus,
   getStemUrl,
+  createCoverArt,
+  generateMusicTool,
 ];
 
 export function findTool(name: string): Tool | undefined {

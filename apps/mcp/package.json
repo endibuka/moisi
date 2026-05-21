@@ -12,6 +12,7 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
+    "inngest": "^3.54.2",
     "jose": "^5.9.6",
     "mcp-handler": "^1.1.0",
     "next": "16.2.6",

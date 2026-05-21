@@ -512,11 +512,41 @@ function TrackRow({
   const [signedAudio, setSignedAudio] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [showError, setShowError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const inFlight = job.status === "pending" || job.status === "processing";
   const failed = job.status === "failed";
   const ready = job.status === "completed" && Boolean(job.stems?.audio);
+
+  const retry = async () => {
+    if (retrying || !job.prompt) return;
+    setRetryError(null);
+    setRetrying(true);
+    try {
+      const nSegments = job.duration_seconds
+        ? Math.max(1, Math.min(6, Math.round(job.duration_seconds / 30)))
+        : 2;
+      const r = await generateMusic({
+        genre: job.prompt,
+        lyrics: job.lyrics ?? "",
+        nSegments,
+        title: job.original_name,
+      });
+      if (r.error || !r.jobId) {
+        setRetryError(r.error ?? "Retry failed.");
+      }
+      // Success: the realtime channel in MusicGenFlow inserts the new row at
+      // the top, leaving this failed one in place for reference. No local
+      // state to update here.
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : "Retry failed.");
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const ensureSignedAudio = async (): Promise<string | null> => {
     if (signedAudio) return signedAudio;
@@ -588,105 +618,190 @@ function TrackRow({
   const hasVocals = Boolean(job.lyrics && job.lyrics.length > 0);
 
   return (
-    <li className="group flex items-center gap-4 rounded-[10px] px-4 py-2.5 transition-colors hover:bg-[rgba(252,252,253,0.03)]">
-      {/* Thumbnail */}
-      <button
-        type="button"
-        onClick={togglePlay}
-        disabled={!ready}
-        aria-label={playing ? "Pause" : "Play"}
-        className="relative size-[56px] shrink-0 overflow-hidden rounded-[8px] disabled:cursor-not-allowed"
-      >
-        {coverUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={coverUrl}
-            alt=""
-            className="absolute inset-0 size-full object-cover"
-          />
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(135deg, rgba(0,218,232,0.22) 0%, rgba(10,255,167,0.14) 50%, rgba(0,128,199,0.22) 100%)",
-            }}
-          />
-        )}
-        <div
-          className={`absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity ${
-            playing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-          }`}
+    <li
+      className={`group flex flex-col rounded-[10px] px-4 py-2.5 transition-colors ${
+        failed
+          ? "bg-[rgba(255,107,107,0.04)] hover:bg-[rgba(255,107,107,0.07)]"
+          : "hover:bg-[rgba(252,252,253,0.03)]"
+      }`}
+    >
+      <div className="flex items-center gap-4">
+        {/* Thumbnail */}
+        <button
+          type="button"
+          onClick={togglePlay}
+          disabled={!ready}
+          aria-label={playing ? "Pause" : "Play"}
+          className="relative size-[56px] shrink-0 overflow-hidden rounded-[8px] disabled:cursor-not-allowed"
         >
-          {ready &&
-            (playing ? (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-white">
-                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="ml-0.5 h-5 w-5 text-white">
-                <path d="M8 5v14l11-7L8 5Z" />
-              </svg>
-            ))}
-        </div>
-        {inFlight && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/55">
-            <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          </div>
-        )}
-      </button>
-
-      {/* Middle: title + subtitle + progress */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-[14px] text-[#fcfcfd]">
-            {job.original_name}
-          </p>
-          {hasVocals ? (
-            <span className="shrink-0 rounded-[3px] bg-[rgba(0,218,232,0.1)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#00dae8]">
-              Vocal
-            </span>
+          {failed ? (
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(255,107,107,0.18) 0%, rgba(122,30,30,0.32) 100%)",
+              }}
+            />
+          ) : coverUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={coverUrl}
+              alt=""
+              className="absolute inset-0 size-full object-cover"
+            />
           ) : (
-            <span className="shrink-0 rounded-[3px] bg-[rgba(252,252,253,0.05)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[rgba(252,252,253,0.5)]">
-              Inst
-            </span>
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(0,218,232,0.22) 0%, rgba(10,255,167,0.14) 50%, rgba(0,128,199,0.22) 100%)",
+              }}
+            />
+          )}
+          {!failed && (
+            <div
+              className={`absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity ${
+                playing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              }`}
+            >
+              {ready &&
+                (playing ? (
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-white">
+                    <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="ml-0.5 h-5 w-5 text-white">
+                    <path d="M8 5v14l11-7L8 5Z" />
+                  </svg>
+                ))}
+            </div>
+          )}
+          {inFlight && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/55">
+              <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            </div>
+          )}
+          {failed && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className="h-5 w-5 text-[#ff8888]"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+              </svg>
+            </div>
+          )}
+        </button>
+
+        {/* Middle: title + subtitle + progress */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[14px] text-[#fcfcfd]">
+              {job.original_name}
+            </p>
+            {failed ? (
+              <span className="shrink-0 rounded-[3px] bg-[rgba(255,107,107,0.12)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#ff8888]">
+                Failed
+              </span>
+            ) : hasVocals ? (
+              <span className="shrink-0 rounded-[3px] bg-[rgba(0,218,232,0.1)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#00dae8]">
+                Vocal
+              </span>
+            ) : (
+              <span className="shrink-0 rounded-[3px] bg-[rgba(252,252,253,0.05)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[rgba(252,252,253,0.5)]">
+                Inst
+              </span>
+            )}
+          </div>
+          {failed ? (
+            <button
+              type="button"
+              onClick={() => setShowError((s) => !s)}
+              className="mt-0.5 flex items-center gap-1 text-[12px] text-[rgba(255,200,200,0.78)] hover:text-[#ff8888]"
+            >
+              <span className="truncate">
+                {(job.error?.split("\n")[0] || "Generation failed").slice(0, 140)}
+              </span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className={`h-3 w-3 shrink-0 transition-transform ${showError ? "rotate-180" : ""}`}
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+          ) : (
+            <p className="mt-0.5 truncate text-[12px] text-[rgba(252,252,253,0.5)]">
+              {inFlight ? "Generating…" : subtitle}
+            </p>
+          )}
+          {ready && (
+            <div className="mt-2 h-[2px] overflow-hidden rounded-full bg-[rgba(252,252,253,0.06)]">
+              <div
+                className="h-full bg-[#00dae8] transition-[width]"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
           )}
         </div>
-        <p className="mt-0.5 truncate text-[12px] text-[rgba(252,252,253,0.5)]">
-          {failed
-            ? job.error ?? "Generation failed."
-            : inFlight
-              ? "Generating…"
-              : subtitle}
-        </p>
-        {ready && (
-          <div className="mt-2 h-[2px] overflow-hidden rounded-full bg-[rgba(252,252,253,0.06)]">
-            <div
-              className="h-full bg-[#00dae8] transition-[width]"
-              style={{ width: `${progress * 100}%` }}
-            />
-          </div>
-        )}
+
+        {/* Right: meta + actions */}
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="font-mono text-[12px] tabular-nums text-[rgba(252,252,253,0.5)]">
+            {durationLabel}
+          </span>
+          {failed && job.prompt && (
+            <button
+              type="button"
+              onClick={retry}
+              disabled={retrying}
+              className="flex h-8 items-center gap-1.5 rounded-full bg-[rgba(255,107,107,0.12)] px-3 text-[12px] font-medium text-[#ff8888] transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {retrying ? (
+                <span className="size-3 animate-spin rounded-full border-2 border-[rgba(255,107,107,0.3)] border-t-[#ff8888]" />
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-3.5 w-3.5"
+                >
+                  <path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5" />
+                </svg>
+              )}
+              {retrying ? "Queuing" : "Retry"}
+            </button>
+          )}
+          {ready && signedAudio && (
+            <a
+              href={signedAudio}
+              download={`${job.original_name.slice(0, 40)}.mp3`}
+              aria-label="Download"
+              className="flex size-8 items-center justify-center rounded-full text-[rgba(252,252,253,0.5)] opacity-0 transition-opacity hover:bg-[rgba(252,252,253,0.05)] hover:text-[#fcfcfd] group-hover:opacity-100"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </svg>
+            </a>
+          )}
+        </div>
       </div>
 
-      {/* Right: meta + actions */}
-      <div className="flex shrink-0 items-center gap-3">
-        <span className="font-mono text-[12px] tabular-nums text-[rgba(252,252,253,0.5)]">
-          {durationLabel}
-        </span>
-        {ready && signedAudio && (
-          <a
-            href={signedAudio}
-            download={`${job.original_name.slice(0, 40)}.mp3`}
-            aria-label="Download"
-            className="flex size-8 items-center justify-center rounded-full text-[rgba(252,252,253,0.5)] opacity-0 transition-opacity hover:bg-[rgba(252,252,253,0.05)] hover:text-[#fcfcfd] group-hover:opacity-100"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
-              <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-            </svg>
-          </a>
-        )}
-      </div>
+      {failed && showError && (
+        <pre className="mt-3 max-h-[180px] overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-[rgba(255,107,107,0.2)] bg-[rgba(0,0,0,0.35)] p-3 font-mono text-[11px] leading-relaxed text-[rgba(255,200,200,0.85)]">
+          {job.error || "No error detail available."}
+        </pre>
+      )}
+      {retryError && (
+        <p className="mt-2 text-[11.5px] text-[#ff8888]">{retryError}</p>
+      )}
     </li>
   );
 }

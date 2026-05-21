@@ -48,6 +48,33 @@ export function getRunpodEnv() {
   return { endpoint, apiKey };
 }
 
+/**
+ * YuE music-generation endpoint. Separate env var so the MCP can target the
+ * music-gen worker independently of the separation one. RUNPOD_API_KEY is
+ * shared across endpoints.
+ */
+export function getYueEnv() {
+  const endpoint = process.env.RUNPOD_YUE_ENDPOINT_ID;
+  const apiKey = process.env.RUNPOD_API_KEY;
+  if (!endpoint || !apiKey) {
+    throw new Error(
+      "RUNPOD_YUE_ENDPOINT_ID and RUNPOD_API_KEY must be set for the music-gen tool.",
+    );
+  }
+  return { endpoint, apiKey };
+}
+
+/**
+ * Gemini API key for the cover-art tool. Same env var as the main app.
+ */
+export function getGeminiKey(): string {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    throw new Error("GEMINI_API_KEY must be set for the cover-art tool.");
+  }
+  return key;
+}
+
 export function getAppOrigin(): string {
   // Where /oauth/authorize sends the user when they need to log in. Default
   // is the local main Next app; in prod set MOISI_APP_ORIGIN to the deployed

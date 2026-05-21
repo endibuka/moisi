@@ -1,4 +1,4 @@
-import { getRunpodEnv } from "./env";
+import { getRunpodEnv, getYueEnv } from "./env";
 
 const RUNPOD_BASE = "https://api.runpod.ai/v2";
 
@@ -8,10 +8,19 @@ export type SeparationInput = {
   job_id: string;
 };
 
-export async function startRunpodSeparation(
-  input: SeparationInput,
+export type YueInput = {
+  genre: string;
+  lyrics: string;
+  n_segments: number;
+  output_prefix: string;
+  job_id: string;
+};
+
+async function postRun(
+  endpoint: string,
+  apiKey: string,
+  input: unknown,
 ): Promise<string> {
-  const { endpoint, apiKey } = getRunpodEnv();
   const res = await fetch(`${RUNPOD_BASE}/${endpoint}/run`, {
     method: "POST",
     headers: {
@@ -26,4 +35,16 @@ export async function startRunpodSeparation(
   const data = (await res.json()) as { id?: string };
   if (!data.id) throw new Error("RunPod /run returned no job id.");
   return data.id;
+}
+
+export async function startRunpodSeparation(
+  input: SeparationInput,
+): Promise<string> {
+  const { endpoint, apiKey } = getRunpodEnv();
+  return postRun(endpoint, apiKey, input);
+}
+
+export async function startRunpodMusicGen(input: YueInput): Promise<string> {
+  const { endpoint, apiKey } = getYueEnv();
+  return postRun(endpoint, apiKey, input);
 }

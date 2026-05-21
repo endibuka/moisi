@@ -117,7 +117,7 @@ export async function generateMusicForUser(
 
     await inngest.send({
       name: "app/separation.queued",
-      data: { jobId: job.id, runpodId },
+      data: { jobId: job.id, runpodId, endpointKind: "music_gen" },
     });
 
     return { jobId: job.id };

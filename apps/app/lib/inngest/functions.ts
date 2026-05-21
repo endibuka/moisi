@@ -1,4 +1,5 @@
 import { inngest } from "./client";
+import { generateCoverArtForUser } from "@/lib/cover-art-service";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   endpointKindForJobType,
@@ -105,6 +106,18 @@ export const watchSeparationJob = inngest.createFunction(
       const terminal = terminalFromStatus(live);
       if (terminal) {
         await step.run(`write-${i}`, () => writeTerminal(jobId, terminal));
+        // Music-gen tracks get an auto-cover so the library row isn't a blank
+        // gradient. Fire-and-forget — the dedicated function below handles
+        // failures + retries independently of this watcher's lifecycle.
+        if (
+          terminal.kind === "completed" &&
+          endpointKind === "music_gen"
+        ) {
+          await step.sendEvent(`cover-${i}`, {
+            name: "app/cover.requested",
+            data: { jobId },
+          });
+        }
         return { result: terminal.kind, attempts: i + 1, status: live.status };
       }
     }
@@ -198,12 +211,81 @@ export const reconcileStuckJobs = inngest.createFunction(
       })();
 
       await step.run(`write-${row.id}`, () => writeTerminal(row.id, update));
-      if (update.kind === "completed") completed += 1;
-      else failed += 1;
+      if (update.kind === "completed") {
+        completed += 1;
+        // Same auto-cover hook the watcher uses, in case the reconciler is
+        // the path that wrote `completed` (rare: watcher missed it).
+        if (endpointKindForJobType(row.job_type) === "music_gen") {
+          await step.sendEvent(`cover-${row.id}`, {
+            name: "app/cover.requested",
+            data: { jobId: row.id },
+          });
+        }
+      } else {
+        failed += 1;
+      }
     }
 
     return { checked: stuck.length, completed, failed };
   },
 );
 
-export const functions = [watchSeparationJob, reconcileStuckJobs];
+/**
+ * Auto-generate a cover for a freshly-completed music-gen track. The user's
+ * style prompt is the perfect raw material for Gemini, so we feed it back as
+ * the cover prompt and link the result to the row. Failures are logged but
+ * NEVER bubble up — a missing cover is a cosmetic regression, not a song one.
+ */
+export const generateMusicGenCover = inngest.createFunction(
+  {
+    id: "generate-music-gen-cover",
+    name: "Auto-generate cover art for music-gen track",
+    // One cover per job; if the event fires twice (watcher + reconciler race)
+    // the second call no-ops at Inngest's idempotency layer.
+    idempotency: "event.data.jobId",
+    retries: 1,
+  },
+  { event: "app/cover.requested" },
+  async ({ event, step }) => {
+    const { jobId } = event.data;
+
+    const job = await step.run("fetch-job", async () => {
+      const admin = createAdminClient();
+      const { data, error } = await admin
+        .from("separation_jobs")
+        .select("id, user_id, prompt, cover_art_path, status")
+        .eq("id", jobId)
+        .maybeSingle();
+      if (error) throw new Error(`fetch-job failed: ${error.message}`);
+      return data;
+    });
+
+    if (!job) return { skipped: "job-not-found" };
+    if (job.status !== "completed") return { skipped: "not-completed" };
+    if (job.cover_art_path) return { skipped: "already-has-cover" };
+
+    const result = await step.run("generate", () =>
+      generateCoverArtForUser({
+        userId: job.user_id,
+        jobId: job.id,
+        // Reuse the music-gen style prompt as the cover prompt — the user
+        // already described the mood/genre, so we get a thematically-aligned
+        // image without asking for input again.
+        userPrompt: job.prompt ?? null,
+      }),
+    );
+
+    if ("error" in result) {
+      // Non-fatal — leave the row coverless and move on.
+      console.error("[auto-cover] generation failed:", result.error);
+      return { ok: false, error: result.error };
+    }
+    return { ok: true, path: result.path };
+  },
+);
+
+export const functions = [
+  watchSeparationJob,
+  reconcileStuckJobs,
+  generateMusicGenCover,
+];
