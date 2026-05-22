@@ -56,37 +56,50 @@ export async function generateCoverArt(
     };
   }
 
-  // Upload via the service-role client so RLS doesn't block the write.
-  const admin = createAdminClient();
-  const ext = mimeType === "image/jpeg" ? "jpg" : "png";
-  const path = `${job.user_id}/${job.id}/cover-art-${Date.now()}.${ext}`;
-  // Supabase Storage's upload accepts Blob in the browser SDK; on the server
-  // it accepts Uint8Array directly via the Node Storage client.
-  const { error: uploadError } = await admin.storage
-    .from("stems")
-    .upload(path, bytes, { contentType: mimeType, upsert: true });
-  if (uploadError) {
-    console.error("[cover-art] storage upload failed:", uploadError);
-    return { error: `Could not save cover art: ${uploadError.message}` };
-  }
+  // Persist + link via the service-role client. Wrapped so a misconfigured
+  // server (e.g. missing SUPABASE_SERVICE_ROLE_KEY, which makes
+  // createAdminClient throw "supabaseKey is required.") surfaces as a readable
+  // error instead of an uncaught 500 / "Server Components render" wall.
+  try {
+    // Upload via the service-role client so RLS doesn't block the write.
+    const admin = createAdminClient();
+    const ext = mimeType === "image/jpeg" ? "jpg" : "png";
+    const path = `${job.user_id}/${job.id}/cover-art-${Date.now()}.${ext}`;
+    // Supabase Storage's upload accepts Blob in the browser SDK; on the server
+    // it accepts Uint8Array directly via the Node Storage client.
+    const { error: uploadError } = await admin.storage
+      .from("stems")
+      .upload(path, bytes, { contentType: mimeType, upsert: true });
+    if (uploadError) {
+      console.error("[cover-art] storage upload failed:", uploadError);
+      return { error: `Could not save cover art: ${uploadError.message}` };
+    }
 
-  // Record the path on the job row.
-  const { error: updateError } = await admin
-    .from("separation_jobs")
-    .update({ cover_art_path: path })
-    .eq("id", job.id);
-  if (updateError) {
-    console.error("[cover-art] db update failed:", updateError);
-    return { error: `Saved image but couldn't link it: ${updateError.message}` };
-  }
+    // Record the path on the job row.
+    const { error: updateError } = await admin
+      .from("separation_jobs")
+      .update({ cover_art_path: path })
+      .eq("id", job.id);
+    if (updateError) {
+      console.error("[cover-art] db update failed:", updateError);
+      return {
+        error: `Saved image but couldn't link it: ${updateError.message}`,
+      };
+    }
 
-  // Return a short-lived signed URL so the UI can show the result immediately.
-  const { data: signed, error: signError } = await admin.storage
-    .from("stems")
-    .createSignedUrl(path, 60 * 60);
-  if (signError || !signed) {
-    return { error: "Generated, but could not sign a preview URL." };
-  }
+    // Return a short-lived signed URL so the UI can show the result immediately.
+    const { data: signed, error: signError } = await admin.storage
+      .from("stems")
+      .createSignedUrl(path, 60 * 60);
+    if (signError || !signed) {
+      return { error: "Generated, but could not sign a preview URL." };
+    }
 
-  return { ok: true, path, signedUrl: signed.signedUrl };
+    return { ok: true, path, signedUrl: signed.signedUrl };
+  } catch (err) {
+    console.error("[cover-art] save step threw:", err);
+    return {
+      error: err instanceof Error ? err.message : "Could not save cover art.",
+    };
+  }
 }

@@ -120,35 +120,45 @@ export async function museCreateCoverArt(
     };
   }
 
-  const admin = createAdminClient();
-  const ext = mimeType === "image/jpeg" ? "jpg" : "png";
-  const path = `${storageFolder}/cover-art-${Date.now()}.${ext}`;
-  const { error: uploadError } = await admin.storage
-    .from("stems")
-    .upload(path, bytes, { contentType: mimeType, upsert: true });
-  if (uploadError) {
-    return { error: `Could not save cover art: ${uploadError.message}` };
-  }
+  // Persist + link via the service-role client. Wrapped so a misconfigured
+  // server (e.g. missing SUPABASE_SERVICE_ROLE_KEY) surfaces as a tool error
+  // the agent can relay, not an uncaught 500.
+  try {
+    const admin = createAdminClient();
+    const ext = mimeType === "image/jpeg" ? "jpg" : "png";
+    const path = `${storageFolder}/cover-art-${Date.now()}.${ext}`;
+    const { error: uploadError } = await admin.storage
+      .from("stems")
+      .upload(path, bytes, { contentType: mimeType, upsert: true });
+    if (uploadError) {
+      return { error: `Could not save cover art: ${uploadError.message}` };
+    }
 
-  if (jobToLink) {
-    await admin
-      .from("separation_jobs")
-      .update({ cover_art_path: path })
-      .eq("id", jobToLink);
-  }
+    if (jobToLink) {
+      await admin
+        .from("separation_jobs")
+        .update({ cover_art_path: path })
+        .eq("id", jobToLink);
+    }
 
-  const { data: signed } = await admin.storage
-    .from("stems")
-    .createSignedUrl(path, 60 * 60 * 24); // 24h — chat history may be reloaded
-  if (!signed) {
-    return { error: "Generated, but could not sign a preview URL." };
-  }
+    const { data: signed } = await admin.storage
+      .from("stems")
+      .createSignedUrl(path, 60 * 60 * 24); // 24h — chat history may reload
+    if (!signed) {
+      return { error: "Generated, but could not sign a preview URL." };
+    }
 
-  return {
-    ok: true,
-    signedUrl: signed.signedUrl,
-    path,
-    title,
-    libraryJobId: jobToLink ?? undefined,
-  };
+    return {
+      ok: true,
+      signedUrl: signed.signedUrl,
+      path,
+      title,
+      libraryJobId: jobToLink ?? undefined,
+    };
+  } catch (err) {
+    console.error("[muse-cover] save step threw:", err);
+    return {
+      error: err instanceof Error ? err.message : "Could not save cover art.",
+    };
+  }
 }

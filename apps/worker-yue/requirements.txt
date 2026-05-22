@@ -23,3 +23,12 @@ soundfile
 # standalone tensorboard package (absent from the pytorch base image). Without
 # it inference dies at import: ModuleNotFoundError: No module named 'tensorboard'.
 tensorboard
+# Same story: xcodec_mini_infer/utils/utils.py does `import matplotlib` at module
+# top-level, so it's needed just to load the inference code even though we never
+# plot anything. Missing it dies at import: No module named 'matplotlib'.
+matplotlib
+# Hard-pin NumPy below 2.x. The pytorch:2.4.1 base image ships NumPy 1.x and its
+# compiled extensions (torch, etc.) are built against it. Leaving matplotlib
+# unpinned lets pip pull NumPy 2.x, which breaks those C-extensions at import —
+# surfacing masked as transformers' "Could not import module 'GenerationMixin'".
+numpy<2
