@@ -8,6 +8,22 @@
 const MODEL = "gemini-2.5-flash-image";
 const TEXT_MODEL = "gemini-flash-latest";
 
+/**
+ * Resolve the Generative Language API key. Accept either GEMINI_API_KEY or
+ * GOOGLE_API_KEY — the @google/genai SDK (used by the Muse ADK agent) honours
+ * both, so this keeps the chat and the direct image client on the same key and
+ * avoids a "works in chat, fails on images" split when only one is set in prod.
+ */
+function resolveApiKey(): string {
+  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!key) {
+    throw new Error(
+      "Gemini is not configured: set GEMINI_API_KEY (or GOOGLE_API_KEY) on the server.",
+    );
+  }
+  return key;
+}
+
 type Part =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } };
@@ -24,10 +40,7 @@ type GenerateContentResponse = {
 export async function generateImage(
   prompt: string,
 ): Promise<{ bytes: Uint8Array; mimeType: string }> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    throw new Error("GEMINI_API_KEY is not configured on the server.");
-  }
+  const key = resolveApiKey();
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`,
@@ -77,10 +90,7 @@ type TextResponse = {
  * function calling, go through the ADK agent instead.
  */
 export async function generateText(prompt: string): Promise<string> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    throw new Error("GEMINI_API_KEY is not configured on the server.");
-  }
+  const key = resolveApiKey();
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODEL}:generateContent?key=${key}`,
