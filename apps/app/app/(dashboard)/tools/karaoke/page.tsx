@@ -4,31 +4,33 @@ import VocalIsolationFlow, {
 } from "@/components/tools/VocalIsolationFlow";
 import type { LibraryItem } from "@/components/tools/AudioSourcePicker";
 import type { StemPaths } from "@/lib/separation";
+import { getProxyUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function KaraokePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getProxyUser();
   const userId = user?.id ?? "";
 
-  const { data: libraryRows } = await supabase
-    .from("separation_jobs")
-    .select("id, original_name, input_path")
-    .eq("user_id", userId)
-    .in("job_type", ["separation", "vocal_isolation"])
-    .eq("status", "completed")
-    .order("created_at", { ascending: false })
-    .limit(20);
-
-  const { data: jobRows } = await supabase
-    .from("separation_jobs")
-    .select("id, status, original_name, stems, error, created_at, duration_seconds")
-    .eq("user_id", userId)
-    .eq("job_type", "vocal_isolation")
-    .order("created_at", { ascending: false })
-    .limit(8);
+  const [{ data: libraryRows }, { data: jobRows }] = await Promise.all([
+    supabase
+      .from("separation_jobs")
+      .select("id, original_name, input_path")
+      .eq("user_id", userId)
+      .in("job_type", ["separation", "vocal_isolation"])
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("separation_jobs")
+      .select(
+        "id, status, original_name, stems, error, created_at, duration_seconds",
+      )
+      .eq("user_id", userId)
+      .eq("job_type", "vocal_isolation")
+      .order("created_at", { ascending: false })
+      .limit(8),
+  ]);
 
   const library: LibraryItem[] = (libraryRows ?? []) as LibraryItem[];
   const initialJobs: VocalIsolationJob[] = (jobRows ?? []).map((r) => ({

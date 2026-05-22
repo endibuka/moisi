@@ -764,27 +764,50 @@ function ToggleRow({
   return (
     <>
       <RowBetween>
-        <div>
+        <div className="pr-4">
           <p className="text-[13px] text-[#fcfcfd]">{title}</p>
           <p className="text-[12px] text-[rgba(252,252,253,0.6)]">{subtitle}</p>
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={on}
-          onClick={() => setOn((v) => !v)}
-          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-            on ? "bg-[#00dae8]" : "bg-[rgba(252,252,253,0.1)]"
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 size-4 rounded-full bg-[#fcfcfd] transition-transform ${
-              on ? "translate-x-[18px]" : "translate-x-0.5"
-            }`}
-          />
-        </button>
+        <Toggle on={on} onChange={setOn} label={title} />
       </RowBetween>
       {!last && <div className="my-3 h-px bg-[rgba(252,252,253,0.04)]" />}
     </>
+  );
+}
+
+/**
+ * iOS-style toggle. 28px tall track with a 24px thumb, inset shadow on the
+ * track, a soft drop shadow on the thumb, and a focus ring for keyboard
+ * users. The thumb translates exactly `track_width - thumb_width - 2*inset`
+ * (= 22px) so the off/on positions are visually symmetric.
+ */
+function Toggle({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => onChange(!on)}
+      className={`relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00dae8]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e0f11] ${
+        on
+          ? "bg-[#00dae8] shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
+          : "bg-[rgba(252,252,253,0.08)] shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)]"
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-[0_2px_4px_rgba(0,0,0,0.35),0_1px_1px_rgba(0,0,0,0.2)] transition-transform duration-200 ease-out ${
+          on ? "translate-x-[18px]" : "translate-x-0.5"
+        }`}
+      />
+    </button>
   );
 }

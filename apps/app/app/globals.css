@@ -17,3 +17,29 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+/* Pending indicator for sidebar Link clicks (via `useLinkStatus`).
+   A conic gradient sweeps cyan → green around the link's rounded border.
+   @property is what lets the CSS angle interpolate smoothly — without it
+   conic-gradient angles would snap, not rotate. */
+@property --pending-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes pending-ring-rotate {
+  to {
+    --pending-angle: 360deg;
+  }
+}
+
+@keyframes pending-ring-fade {
+  0% {
+    opacity: 0;
+  }
+  20%,
+  100% {
+    opacity: 1;
+  }
+}

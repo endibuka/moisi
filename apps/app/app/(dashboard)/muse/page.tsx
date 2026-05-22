@@ -3,7 +3,7 @@ import MuseChat from "@/components/MuseChat";
 import { getConversation } from "@/lib/muse/conversations";
 import { museKeys } from "@/lib/muse/keys";
 import { getQueryClient } from "@/lib/query-client";
-import { createClient } from "@/lib/supabase/server";
+import { getProxyUser } from "@/lib/supabase/auth";
 
 type SearchParams = Promise<{ c?: string }>;
 
@@ -12,19 +12,21 @@ export default async function MusePage({
 }: {
   searchParams: SearchParams;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const userId = user?.id ?? "";
+  const queryClient = getQueryClient();
 
-  const { c: conversationId } = await searchParams;
+  // Read user (from headers, zero network) and the route's `?c=` param in
+  // parallel with the conversation prefetch — none of these depend on each
+  // other.
+  const [user, { c: conversationId }] = await Promise.all([
+    getProxyUser(),
+    searchParams,
+  ]);
+  const userId = user?.id ?? "";
 
   // Server-prefetch the specific conversation into the TanStack Query cache
   // so direct loads / reloads have data in the first paint. Client-side nav
   // from the sidebar hits a warm cache (hover prefetch + IDB persistence)
   // and never blocks on this round-trip.
-  const queryClient = getQueryClient();
   if (conversationId) {
     await queryClient.prefetchQuery({
       queryKey: museKeys.conversation(conversationId),

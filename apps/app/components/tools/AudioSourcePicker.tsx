@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ACCEPTED_AUDIO_EXT, MAX_UPLOAD_BYTES } from "@/lib/separation";
 
 export type LibraryItem = {
@@ -246,36 +247,42 @@ function LibraryTab({
           {empty}
         </p>
       ) : (
-        <ul className="flex max-h-[360px] flex-col gap-1 overflow-y-auto">
-          {items.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                onClick={() => onPick(item)}
-                className="flex w-full items-center gap-3 rounded-[10px] px-2 py-2 text-left transition-colors hover:bg-[rgba(252,252,253,0.05)]"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-[rgba(0,218,232,0.12)] text-[#00dae8]">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
-                    <path d="M9 18V6l11-2v12" />
-                    <circle cx="6" cy="18" r="3" />
-                    <circle cx="17" cy="16" r="3" />
+        // Radix's ScrollArea needs a *definite* height on its Root for the
+        // Viewport's h-full to resolve and trigger internal scrolling — a
+        // bare `max-h-…` leaves the height auto, so the Viewport just grows
+        // to content and nothing scrolls. Cap at 360px once we'd overflow.
+        <ScrollArea className={items.length > 6 ? "h-[360px]" : ""}>
+          <ul className="flex flex-col gap-1 pr-1">
+            {items.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => onPick(item)}
+                  className="flex w-full items-center gap-3 rounded-[10px] px-2 py-2 text-left transition-colors hover:bg-[rgba(252,252,253,0.05)]"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-[rgba(0,218,232,0.12)] text-[#00dae8]">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+                      <path d="M9 18V6l11-2v12" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="17" cy="16" r="3" />
+                    </svg>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] text-[#fcfcfd]">
+                      {item.original_name}
+                    </span>
+                    <span className="block text-[11px] text-[rgba(252,252,253,0.5)]">
+                      Tap to use this track
+                    </span>
+                  </span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0 text-[rgba(252,252,253,0.4)]">
+                    <path d="m9 6 6 6-6 6" />
                   </svg>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] text-[#fcfcfd]">
-                    {item.original_name}
-                  </span>
-                  <span className="block text-[11px] text-[rgba(252,252,253,0.5)]">
-                    Tap to use this track
-                  </span>
-                </span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0 text-[rgba(252,252,253,0.4)]">
-                  <path d="m9 6 6 6-6 6" />
-                </svg>
-              </button>
-            </li>
-          ))}
-        </ul>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
       )}
     </div>
   );

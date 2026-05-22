@@ -34,6 +34,10 @@ export type SeparationJob = {
   created_at: string;
   duration_seconds: number | null;
   waveform_peaks: WaveformPeaks | null;
+  /** Storage path of the AI-generated cover (Gemini), null until generated.
+   *  Music-gen jobs get one auto-created post-completion by the Inngest
+   *  watcher; separations stay null until the user runs Cover Art on them. */
+  cover_art_path: string | null;
 };
 
 export const STEM_NAMES: StemName[] = [

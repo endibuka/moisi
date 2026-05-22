@@ -1,2 +1,13 @@
 node_modules
 .DS_Store
+
+# Next.js build artifacts — never belong in git. Regenerated per dev session.
+.next/
+**/.next/
+**/tsconfig.tsbuildinfo
+
+# Env files. The repo expects each app to have its own .env.local, never
+# committed.
+.env
+.env.local
+.env.*.local

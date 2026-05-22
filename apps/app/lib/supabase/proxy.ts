@@ -1,3 +1,4 @@
+import type { CookieOptions } from "@supabase/ssr";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -19,9 +20,27 @@ const isPublic = (pathname: string) =>
 /**
  * Refreshes the Supabase session on every request and guards routes.
  * Runs from `proxy.ts` (the Next.js 16 successor to middleware).
+ *
+ * After validating the JWT once here, we forward the verified user info to
+ * downstream RSCs via request headers (`x-user-*`). This lets layouts/pages
+ * read the user without each re-issuing a `supabase.auth.getUser()` network
+ * call — the biggest hidden cost on every navigation.
  */
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  // Start from the incoming request headers, but strip any client-supplied
+  // forwarded-user headers so a malicious request can't spoof identity.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete("x-user-id");
+  requestHeaders.delete("x-user-email");
+  requestHeaders.delete("x-user-name");
+
+  // Cookies Supabase wants to set during session refresh — applied after we
+  // construct the final response with the updated headers.
+  const cookiesToSet: {
+    name: string;
+    value: string;
+    options?: CookieOptions;
+  }[] = [];
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,14 +50,11 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          );
+        setAll(toSet) {
+          for (const { name, value, options } of toSet) {
+            request.cookies.set(name, value);
+            cookiesToSet.push({ name, value, options });
+          }
         },
       },
     },
@@ -68,5 +84,21 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return supabaseResponse;
+  // Forward the verified user to RSCs. encodeURIComponent so non-ASCII names
+  // (emoji, unicode) survive HTTP header encoding; the helper decodes.
+  if (user) {
+    requestHeaders.set("x-user-id", user.id);
+    requestHeaders.set("x-user-email", user.email ?? "");
+    const fullName =
+      (user.user_metadata?.full_name as string | undefined) ?? "";
+    requestHeaders.set("x-user-name", encodeURIComponent(fullName));
+  }
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
+  for (const { name, value, options } of cookiesToSet) {
+    response.cookies.set(name, value, options);
+  }
+  return response;
 }

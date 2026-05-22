@@ -20,7 +20,7 @@ import {
   UsersThree,
   X,
 } from "@phosphor-icons/react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "@/app/(auth)/actions";
@@ -39,10 +39,46 @@ import WhatsNewModal from "./WhatsNewModal";
 
 const ic = "h-4 w-4 shrink-0";
 
+/**
+ * Wraps a Link with a cyan→green conic-gradient ring that rotates around
+ * the link's full border while the click is in-flight. Uses the standard
+ * "padding-box mask, exclude content-box" trick to render as a 1px ring
+ * (the gradient fills the whole box, the mask carves the inside out).
+ *
+ * The parent `<Link>` must be `position: relative` and have a `rounded-…`
+ * class — the ring inherits both via `inset-0` and `rounded-[inherit]`.
+ */
+function PendingBar() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-0 rounded-[inherit] p-px"
+      style={{
+        background:
+          "conic-gradient(from var(--pending-angle), transparent 0deg, #00efff 70deg, #0affa7 140deg, transparent 220deg)",
+        WebkitMask:
+          "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+        WebkitMaskComposite: "xor",
+        mask: "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+        maskComposite: "exclude",
+        animation:
+          "pending-ring-rotate 1.1s linear infinite, pending-ring-fade 220ms ease-out both",
+        filter: "drop-shadow(0 0 6px rgba(0,239,255,0.45))",
+      }}
+    />
+  );
+}
+
 export type SidebarJob = {
   id: string;
   original_name: string;
   status: "pending" | "processing" | "completed" | "failed";
+  /** Short-lived signed URL of the cover art, computed server-side in the
+   *  dashboard layout. Null when the track has no Gemini-generated cover
+   *  (yet). Renders in place of the default MusicNotes icon when present. */
+  cover_url?: string | null;
 };
 
 export default function Sidebar({
@@ -162,6 +198,7 @@ export default function Sidebar({
               </span>
             </>
           )}
+          <PendingBar />
         </Link>
 
         {/* Chats — contextual sub-nav, only visible while on /muse */}
@@ -534,7 +571,7 @@ function NavLink({
       aria-current={active ? "page" : undefined}
       onMouseEnter={prefetch}
       onFocus={prefetch}
-      className={`flex h-9 items-center rounded-[6px] text-[13px] transition-colors ${
+      className={`relative flex h-9 items-center rounded-[6px] text-[13px] transition-colors ${
         collapsed ? "justify-center" : "gap-3 px-3"
       } ${
         active
@@ -549,6 +586,7 @@ function NavLink({
           {badge}
         </span>
       )}
+      <PendingBar />
     </Link>
   );
 }
@@ -651,7 +689,7 @@ function ChatRow({
           href={`/muse?c=${chat.id}`}
           onMouseEnter={onHover}
           onFocus={onHover}
-          className={`flex h-9 items-center gap-3 rounded-[6px] pl-3 pr-8 text-[13px] transition-colors ${
+          className={`relative flex h-9 items-center gap-3 rounded-[6px] pl-3 pr-8 text-[13px] transition-colors ${
             active
               ? "bg-[rgba(221,234,248,0.08)] text-[rgba(252,253,255,0.94)]"
               : "text-[rgba(241,247,254,0.71)] hover:bg-[rgba(221,234,248,0.04)] hover:text-white"
@@ -663,6 +701,7 @@ function ChatRow({
             }`}
           />
           <span className="min-w-0 flex-1 truncate">{chat.title}</span>
+          <PendingBar />
         </Link>
       )}
 
@@ -761,7 +800,7 @@ function LibraryRow({
       title={collapsed ? job.original_name : undefined}
       onMouseEnter={prefetch}
       onFocus={prefetch}
-      className={`flex h-9 items-center rounded-[6px] text-[13px] transition-colors ${
+      className={`relative flex h-9 items-center rounded-[6px] text-[13px] transition-colors ${
         collapsed ? "justify-center" : "gap-2 px-3"
       } ${
         active
@@ -769,7 +808,17 @@ function LibraryRow({
           : "text-[rgba(241,247,254,0.71)] hover:bg-[rgba(221,234,248,0.04)] hover:text-white"
       }`}
     >
-      <MusicNotes weight="fill" className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      {job.cover_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={job.cover_url}
+          alt=""
+          aria-hidden
+          className="h-4 w-4 shrink-0 rounded-[3px] object-cover"
+        />
+      ) : (
+        <MusicNotes weight="fill" className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      )}
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate">
@@ -789,6 +838,7 @@ function LibraryRow({
           )}
         </>
       )}
+      <PendingBar />
     </Link>
   );
 }

@@ -1,8 +1,20 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { generateMusic } from "@/app/actions/music-gen";
+import {
+  ArrowsClockwise,
+  DotsThreeVertical,
+  DownloadSimple,
+  PencilSimple,
+  Trash,
+} from "@phosphor-icons/react";
+import {
+  deleteMusicJob,
+  generateMusic,
+  renameMusicJob,
+} from "@/app/actions/music-gen";
 import type { MusicGenJob } from "@/app/(dashboard)/tools/music-generator/page";
+import ConfirmModal from "@/components/ConfirmModal";
 import SegmentedControl from "@/components/SegmentedControl";
 import TickSlider from "@/components/TickSlider";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -408,7 +420,7 @@ export default function MusicGenFlow({
           {visible.length === 0 ? (
             <EmptyState />
           ) : (
-            <ul className="flex flex-col">
+            <ul className="flex flex-col gap-2">
               {visible.map((job) => (
                 <TrackRow
                   key={job.id}
@@ -419,6 +431,16 @@ export default function MusicGenFlow({
                       : null
                   }
                   supabaseClient={supabase}
+                  onDeleted={(id) => {
+                    setJobs((prev) => prev.filter((j) => j.id !== id));
+                  }}
+                  onRenamed={(id, name) => {
+                    setJobs((prev) =>
+                      prev.map((j) =>
+                        j.id === id ? { ...j, original_name: name } : j,
+                      ),
+                    );
+                  }}
                 />
               ))}
             </ul>
@@ -504,10 +526,14 @@ function TrackRow({
   job,
   coverUrl,
   supabaseClient,
+  onDeleted,
+  onRenamed,
 }: {
   job: MusicGenJob;
   coverUrl: string | null;
   supabaseClient: SupabaseLike;
+  onDeleted: (id: string) => void;
+  onRenamed: (id: string, name: string) => void;
 }) {
   const [signedAudio, setSignedAudio] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -515,7 +541,59 @@ function TrackRow({
   const [showError, setShowError] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState(job.original_name);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (editing && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [editing]);
+
+  const startEdit = () => {
+    setDraftName(job.original_name);
+    setEditing(true);
+  };
+  const commitEdit = async () => {
+    const next = draftName.trim();
+    setEditing(false);
+    if (!next || next === job.original_name) return;
+    onRenamed(job.id, next);
+    const r = await renameMusicJob(job.id, next);
+    if ("error" in r) setActionError(r.error);
+  };
+  const cancelEdit = () => {
+    setDraftName(job.original_name);
+    setEditing(false);
+  };
+
+  const confirmDelete = async () => {
+    setConfirmOpen(false);
+    onDeleted(job.id);
+    const r = await deleteMusicJob(job.id);
+    if ("error" in r) setActionError(r.error);
+  };
+
+  const handleDownload = async () => {
+    const path = job.stems?.audio;
+    if (!path) return;
+    const { data } = await supabaseClient.storage
+      .from("stems")
+      .createSignedUrl(path, 60 * 60, {
+        download: `${job.original_name.slice(0, 40)}.mp3`,
+      });
+    if (data?.signedUrl) {
+      const a = document.createElement("a");
+      a.href = data.signedUrl;
+      a.rel = "noopener";
+      a.click();
+    }
+  };
 
   const inFlight = job.status === "pending" || job.status === "processing";
   const failed = job.status === "failed";
@@ -610,11 +688,6 @@ function TrackRow({
   }, [job.id]);
 
   const subtitle = job.prompt ?? "";
-  const durationLabel = job.duration_seconds
-    ? `${Math.floor(job.duration_seconds / 60)}:${String(
-        Math.floor(job.duration_seconds % 60),
-      ).padStart(2, "0")}`
-    : "—";
   const hasVocals = Boolean(job.lyrics && job.lyrics.length > 0);
 
   return (
@@ -700,9 +773,29 @@ function TrackRow({
         {/* Middle: title + subtitle + progress */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="truncate text-[14px] text-[#fcfcfd]">
-              {job.original_name}
-            </p>
+            {editing ? (
+              <input
+                ref={titleInputRef}
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void commitEdit();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelEdit();
+                  }
+                }}
+                maxLength={80}
+                className="min-w-0 flex-1 truncate bg-transparent text-[14px] text-[#fcfcfd] outline-none"
+              />
+            ) : (
+              <p className="min-w-0 flex-1 truncate text-[14px] text-[#fcfcfd]">
+                {job.original_name}
+              </p>
+            )}
             {failed ? (
               <span className="shrink-0 rounded-[3px] bg-[rgba(255,107,107,0.12)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#ff8888]">
                 Failed
@@ -751,46 +844,17 @@ function TrackRow({
           )}
         </div>
 
-        {/* Right: meta + actions */}
-        <div className="flex shrink-0 items-center gap-3">
-          <span className="font-mono text-[12px] tabular-nums text-[rgba(252,252,253,0.5)]">
-            {durationLabel}
-          </span>
-          {failed && job.prompt && (
-            <button
-              type="button"
-              onClick={retry}
-              disabled={retrying}
-              className="flex h-8 items-center gap-1.5 rounded-full bg-[rgba(255,107,107,0.12)] px-3 text-[12px] font-medium text-[#ff8888] transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {retrying ? (
-                <span className="size-3 animate-spin rounded-full border-2 border-[rgba(255,107,107,0.3)] border-t-[#ff8888]" />
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  className="h-3.5 w-3.5"
-                >
-                  <path d="M3 12a9 9 0 0 1 15.5-6.3L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.3L3 16M3 21v-5h5" />
-                </svg>
-              )}
-              {retrying ? "Queuing" : "Retry"}
-            </button>
-          )}
-          {ready && signedAudio && (
-            <a
-              href={signedAudio}
-              download={`${job.original_name.slice(0, 40)}.mp3`}
-              aria-label="Download"
-              className="flex size-8 items-center justify-center rounded-full text-[rgba(252,252,253,0.5)] opacity-0 transition-opacity hover:bg-[rgba(252,252,253,0.05)] hover:text-[#fcfcfd] group-hover:opacity-100"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
-                <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-              </svg>
-            </a>
-          )}
+        {/* Right: single actions menu */}
+        <div className="flex shrink-0 items-center">
+          <TrackMenu
+            ready={ready}
+            failed={failed}
+            retrying={retrying}
+            onRename={startEdit}
+            onDownload={handleDownload}
+            onRetry={failed && job.prompt ? retry : undefined}
+            onDelete={() => setConfirmOpen(true)}
+          />
         </div>
       </div>
 
@@ -802,7 +866,163 @@ function TrackRow({
       {retryError && (
         <p className="mt-2 text-[11.5px] text-[#ff8888]">{retryError}</p>
       )}
+      {actionError && (
+        <p className="mt-2 text-[11.5px] text-[#ff8888]">{actionError}</p>
+      )}
+
+      <ConfirmModal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={confirmDelete}
+        title="Delete this track?"
+        description={
+          <>
+            This will permanently remove the track and its files.
+            <br />
+            <span className="text-[rgba(252,252,253,0.85)]">
+              {job.original_name}
+            </span>
+          </>
+        }
+        confirmLabel="Delete"
+        destructive
+      />
     </li>
+  );
+}
+
+/**
+ * Right-side actions menu for a track row. Single 3-dots trigger; menu
+ * surfaces Rename, Download (when ready), Retry (failed only), Delete.
+ * Closes on outside click or Escape.
+ */
+function TrackMenu({
+  ready,
+  failed,
+  retrying,
+  onRename,
+  onDownload,
+  onRetry,
+  onDelete,
+}: {
+  ready: boolean;
+  failed: boolean;
+  retrying: boolean;
+  onRename: () => void;
+  onDownload: () => void | Promise<void>;
+  onRetry?: () => void | Promise<void>;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label="Track actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={`flex size-8 items-center justify-center rounded-full text-[rgba(252,252,253,0.55)] transition-colors hover:bg-[rgba(252,252,253,0.06)] hover:text-[#fcfcfd] ${
+          open ? "bg-[rgba(252,252,253,0.06)] text-[#fcfcfd]" : ""
+        }`}
+      >
+        <DotsThreeVertical weight="bold" className="h-4 w-4" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-[10px] border border-[#212225] bg-[#1a1b1e] py-1 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.5)]"
+        >
+          <MenuItem
+            onClick={() => {
+              setOpen(false);
+              onRename();
+            }}
+            icon={<PencilSimple weight="fill" className="h-3.5 w-3.5" />}
+            label="Rename"
+          />
+          {ready && (
+            <MenuItem
+              onClick={() => {
+                setOpen(false);
+                void onDownload();
+              }}
+              icon={<DownloadSimple weight="fill" className="h-3.5 w-3.5" />}
+              label="Download"
+            />
+          )}
+          {failed && onRetry && (
+            <MenuItem
+              onClick={() => {
+                setOpen(false);
+                void onRetry();
+              }}
+              icon={<ArrowsClockwise weight="fill" className="h-3.5 w-3.5" />}
+              label={retrying ? "Queuing…" : "Retry"}
+              disabled={retrying}
+            />
+          )}
+          <MenuItem
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+            icon={<Trash weight="fill" className="h-3.5 w-3.5" />}
+            label="Delete"
+            destructive
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({
+  onClick,
+  icon,
+  label,
+  destructive,
+  disabled,
+}: {
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  destructive?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition-colors disabled:opacity-50 ${
+        destructive
+          ? "text-[#ff8a8a] hover:bg-[rgba(255,93,93,0.10)] hover:text-[#ffaeae]"
+          : "text-[rgba(241,247,254,0.85)] hover:bg-[rgba(221,234,248,0.06)] hover:text-white"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

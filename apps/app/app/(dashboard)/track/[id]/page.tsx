@@ -12,13 +12,10 @@ export default async function TrackPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // Auth is enforced by proxy.ts before we ever reach here; RLS additionally
+  // scopes the job row to the requesting user. No page-level getUser needed.
   const { id } = await params;
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const { data: job } = await supabase
     .from("separation_jobs")

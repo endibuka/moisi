@@ -16,9 +16,6 @@ const nextConfig: NextConfig = {
   experimental: {
     // Persist Turbopack's work to .next between dev sessions for faster boots.
     turbopackFileSystemCacheForDev: true,
-    // Route transitions are handled by framer-motion's AnimatePresence in
-    // PageTransition.tsx — disable Next's built-in viewTransition so the two
-    // don't fight (browser crossfade + motion.div animation = double swap).
     viewTransition: false,
   },
   // ADK + its OpenTelemetry/GCP/MikroORM/MCP deps don't bundle cleanly through

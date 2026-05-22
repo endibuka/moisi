@@ -1,4 +1,5 @@
 import MusicGenFlow from "@/components/tools/MusicGenFlow";
+import { getProxyUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export type MusicGenJob = {
@@ -16,16 +17,15 @@ export type MusicGenJob = {
 
 export default async function MusicGeneratorPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getProxyUser();
+  const userId = user?.id ?? "";
 
   const { data: jobsRaw } = await supabase
     .from("separation_jobs")
     .select(
       "id, status, original_name, prompt, lyrics, duration_seconds, stems, cover_art_path, error, created_at",
     )
-    .eq("user_id", user?.id ?? "")
+    .eq("user_id", userId)
     .eq("job_type", "music_generation")
     .order("created_at", { ascending: false })
     .limit(50);
@@ -46,15 +46,13 @@ export default async function MusicGeneratorPage() {
     }
   }
 
-  const userName =
-    (user?.user_metadata?.full_name as string | undefined) ||
-    user?.email?.split("@")[0] ||
-    "Workspace";
+  const workspaceName =
+    user?.name || user?.email?.split("@")[0] || "Workspace";
 
   return (
     <MusicGenFlow
-      userId={user?.id ?? ""}
-      workspaceName={userName}
+      userId={userId}
+      workspaceName={workspaceName}
       jobs={jobs}
       coverUrlByPath={coverUrlByPath}
     />

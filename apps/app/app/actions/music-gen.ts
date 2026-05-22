@@ -111,3 +111,65 @@ export async function generateMusic(input: {
     );
   }
 }
+
+const MAX_NAME_LEN = 80;
+
+/** Rename a generated track. RLS already restricts updates to the owner. */
+export async function renameMusicJob(
+  jobId: string,
+  newName: string,
+): Promise<{ ok: true } | { error: string }> {
+  const name = newName.trim().slice(0, MAX_NAME_LEN);
+  if (!name) return { error: "Name cannot be empty." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("separation_jobs")
+    .update({ original_name: name })
+    .eq("id", jobId);
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Delete a generated track. We remove the job row first (RLS-scoped) and
+ * then best-effort clean up the generated mp3 + cover art from Storage. If
+ * the row delete fails we bail; if the storage cleanup fails we still
+ * succeed so the user isn't stuck with a phantom row.
+ */
+export async function deleteMusicJob(
+  jobId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data: job } = await supabase
+    .from("separation_jobs")
+    .select("stems, cover_art_path")
+    .eq("id", jobId)
+    .maybeSingle();
+
+  const paths: string[] = [];
+  const stems = (job?.stems ?? null) as { audio?: string } | null;
+  if (stems?.audio) paths.push(stems.audio);
+  if (job?.cover_art_path) paths.push(job.cover_art_path as string);
+
+  const { error: deleteError } = await supabase
+    .from("separation_jobs")
+    .delete()
+    .eq("id", jobId);
+  if (deleteError) return { error: deleteError.message };
+
+  if (paths.length > 0) {
+    await supabase.storage.from("stems").remove(paths);
+  }
+  return { ok: true };
+}

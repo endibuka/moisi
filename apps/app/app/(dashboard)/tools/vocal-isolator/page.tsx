@@ -4,36 +4,39 @@ import VocalIsolationFlow, {
 } from "@/components/tools/VocalIsolationFlow";
 import type { LibraryItem } from "@/components/tools/AudioSourcePicker";
 import type { StemPaths } from "@/lib/separation";
+import { getProxyUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function VocalIsolatorPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getProxyUser();
   const userId = user?.id ?? "";
 
   // Library: only show real uploaded sources (full separations and prior
   // vocal isolations). music_generation rows use synthetic input_paths that
   // can't be re-fed to the GPU worker.
-  const { data: libraryRows } = await supabase
-    .from("separation_jobs")
-    .select("id, original_name, input_path")
-    .eq("user_id", userId)
-    .in("job_type", ["separation", "vocal_isolation"])
-    .eq("status", "completed")
-    .order("created_at", { ascending: false })
-    .limit(20);
-
   // Recent runs of *this* tool — drives live status + inline playback once a
   // job lands. We pull a few extras so the user can replay prior results.
-  const { data: jobRows } = await supabase
-    .from("separation_jobs")
-    .select("id, status, original_name, stems, error, created_at, duration_seconds")
-    .eq("user_id", userId)
-    .eq("job_type", "vocal_isolation")
-    .order("created_at", { ascending: false })
-    .limit(8);
+  // Both queries run in parallel since they're independent.
+  const [{ data: libraryRows }, { data: jobRows }] = await Promise.all([
+    supabase
+      .from("separation_jobs")
+      .select("id, original_name, input_path")
+      .eq("user_id", userId)
+      .in("job_type", ["separation", "vocal_isolation"])
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("separation_jobs")
+      .select(
+        "id, status, original_name, stems, error, created_at, duration_seconds",
+      )
+      .eq("user_id", userId)
+      .eq("job_type", "vocal_isolation")
+      .order("created_at", { ascending: false })
+      .limit(8),
+  ]);
 
   const library: LibraryItem[] = (libraryRows ?? []) as LibraryItem[];
   const initialJobs: VocalIsolationJob[] = (jobRows ?? []).map((r) => ({

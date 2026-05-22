@@ -138,3 +138,70 @@ export async function startVocalIsolation(
     "vocal_isolation",
   );
 }
+
+const MAX_NAME_LEN = 80;
+
+/** Rename a separation job. RLS restricts updates to the owner. */
+export async function renameSeparationJob(
+  jobId: string,
+  newName: string,
+): Promise<{ ok: true } | { error: string }> {
+  const name = newName.trim().slice(0, MAX_NAME_LEN);
+  if (!name) return { error: "Name cannot be empty." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("separation_jobs")
+    .update({ original_name: name })
+    .eq("id", jobId);
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Delete a separation job and best-effort clean up its stems + cover art
+ * + original upload from Storage. Failure to clean files is non-fatal —
+ * the row delete is the source of truth.
+ */
+export async function deleteSeparationJob(
+  jobId: string,
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data: job } = await supabase
+    .from("separation_jobs")
+    .select("stems, cover_art_path, input_path")
+    .eq("id", jobId)
+    .maybeSingle();
+
+  const stemPaths: string[] = [];
+  const stems = (job?.stems ?? null) as Record<string, string> | null;
+  if (stems) {
+    for (const p of Object.values(stems)) if (p) stemPaths.push(p);
+  }
+  if (job?.cover_art_path) stemPaths.push(job.cover_art_path as string);
+
+  const { error: deleteError } = await supabase
+    .from("separation_jobs")
+    .delete()
+    .eq("id", jobId);
+  if (deleteError) return { error: deleteError.message };
+
+  if (stemPaths.length > 0) {
+    await supabase.storage.from("stems").remove(stemPaths);
+  }
+  // The original upload — only delete if it lives under our user prefix.
+  if (typeof job?.input_path === "string" && job.input_path.startsWith(`${user.id}/`)) {
+    await supabase.storage.from("uploads").remove([job.input_path]);
+  }
+  return { ok: true };
+}
