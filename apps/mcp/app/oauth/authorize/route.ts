@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getClient } from "@/lib/oauth-store";
+import { getIssuer } from "@/lib/env";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 /**
@@ -49,17 +50,21 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Build redirects off the public issuer, not request.url: behind Cloud Run
+  // (and similar proxies) request.url resolves to the internal bind address
+  // (https://0.0.0.0:8080), which the browser can't reach.
+  const origin = getIssuer();
+
   if (!user) {
     // Bounce to our own login page; it'll come back here with the same query.
-    const me = new URL(request.url);
-    const next = `${me.pathname}?${sp.toString()}`;
-    const login = new URL("/oauth/login", request.url);
+    const next = `${request.nextUrl.pathname}?${sp.toString()}`;
+    const login = new URL("/oauth/login", origin);
     login.searchParams.set("next", next);
     return NextResponse.redirect(login);
   }
 
   // Logged in — go to the consent page which finalises the code grant.
-  const consent = new URL("/oauth/consent", request.url);
+  const consent = new URL("/oauth/consent", origin);
   sp.forEach((v, k) => consent.searchParams.set(k, v));
   consent.searchParams.set("scope", scope);
   return NextResponse.redirect(consent);
