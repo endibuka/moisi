@@ -7,7 +7,8 @@
 FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ffmpeg \
+  && apt-get install -y --no-install-recommends git git-lfs ffmpeg \
+  && git lfs install \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -16,8 +17,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Clone YuE inference code (Apache 2.0).
-RUN git clone --depth 1 https://github.com/multimodal-art-projection/YuE.git /app/YuE
+# Clone YuE inference code (Apache 2.0). YuE's infer.py does
+# `sys.path.append('./xcodec_mini_infer')` and imports from `models.*`, so a
+# second LFS-tracked repo has to be cloned INTO inference/ as a sibling
+# directory — the script will only resolve those imports when launched with
+# cwd=YuE/inference (see handler.py).
+RUN git clone --depth 1 https://github.com/multimodal-art-projection/YuE.git /app/YuE \
+  && git clone --depth 1 https://huggingface.co/m-a-p/xcodec_mini_infer \
+       /app/YuE/inference/xcodec_mini_infer
 
 # Pre-fetch the model weights into the HuggingFace cache so cold starts skip
 # the multi-GB download. Switch checkpoints via the YUE_STAGE1 / YUE_STAGE2

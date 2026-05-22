@@ -27,7 +27,12 @@ import runpod
 
 
 YUE_DIR = pathlib.Path("/app/YuE")
-INFER_SCRIPT = YUE_DIR / "inference" / "infer.py"
+# YuE's infer.py uses relative imports (`from models.X`) and
+# `sys.path.append('./xcodec_mini_infer')`, so it MUST run with
+# cwd=YuE/inference. Running it from anywhere else triggers
+# ModuleNotFoundError: No module named 'models'.
+INFER_CWD = YUE_DIR / "inference"
+INFER_SCRIPT = INFER_CWD / "infer.py"
 STAGE1 = os.environ.get("YUE_STAGE1", "m-a-p/YuE-s1-7B-anneal-en-cot")
 STAGE2 = os.environ.get("YUE_STAGE2", "m-a-p/YuE-s2-1B-general")
 
@@ -77,7 +82,7 @@ def _run_yue(genre: str, lyrics: str, n_segments: int, out_dir: pathlib.Path) ->
         "--run_n_segments", str(n_segments),
         "--output_dir", str(out_dir),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=YUE_DIR)
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(INFER_CWD))
     if proc.returncode != 0:
         raise RuntimeError(
             f"YuE inference failed (rc={proc.returncode}):\n"
