@@ -12,9 +12,12 @@ const ERRORS: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
+  // Only honour same-origin paths so a crafted ?next can't bounce the user
+  // off-site after they've entered credentials.
+  const safeNext = next && next.startsWith("/") ? next : undefined;
 
   return (
     <AuthCard
@@ -32,7 +35,10 @@ export default async function LoginPage({
         </>
       }
     >
-      <LoginForm initialError={error ? ERRORS[error] : undefined} />
+      <LoginForm
+        initialError={error ? ERRORS[error] : undefined}
+        next={safeNext}
+      />
     </AuthCard>
   );
 }

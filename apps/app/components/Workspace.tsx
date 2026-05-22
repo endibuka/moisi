@@ -179,7 +179,10 @@ export default function Workspace({
           filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          const row = payload.new as SeparationJob;
+          const row = payload.new as SeparationJob & { job_type?: string };
+          // Songs (music_generation) belong to the Music Generator tool, not
+          // the Track Separation library — ignore their live updates here.
+          if (row.job_type === "music_generation") return;
           setJobs((prev) => {
             const rest = prev.filter((j) => j.id !== row.id);
             return [row, ...rest].sort((a, b) =>

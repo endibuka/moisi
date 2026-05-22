@@ -1,8 +1,32 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getHandoffSecret } from "@/lib/env";
+import { verifyHandoff } from "@/lib/handoff";
 import { createCode, getClient } from "@/lib/oauth-store";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 const ACCENT = "#0affa7";
+
+type Identity = { id: string; email: string };
+
+/**
+ * Who is approving this grant? Either a real MCP-origin Supabase session (the
+ * legacy password-login path) or — the normal path now — a signed identity
+ * handoff minted by the dashboard and parked in a short httpOnly cookie.
+ */
+async function resolveIdentity(): Promise<Identity | null> {
+  const supabase = await createSupabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) return { id: user.id, email: user.email ?? "" };
+
+  const token = (await cookies()).get("mcp_handoff")?.value;
+  if (!token) return null;
+  const payload = await verifyHandoff(getHandoffSecret(), token);
+  if (!payload) return null;
+  return { id: payload.sub, email: payload.email };
+}
 
 type SearchParams = {
   client_id?: string;
@@ -12,14 +36,6 @@ type SearchParams = {
   state?: string;
   scope?: string;
 };
-
-async function getUser() {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
-}
 
 /**
  * Server action — Approve. Mint a one-shot authorization code bound to
@@ -34,8 +50,8 @@ async function approve(formData: FormData) {
   const state = String(formData.get("state") ?? "");
   const scope = String(formData.get("scope") ?? "mcp:read mcp:write");
 
-  const user = await getUser();
-  if (!user) redirect("/oauth/login");
+  const identity = await resolveIdentity();
+  if (!identity) redirect("/oauth/login");
 
   const client = await getClient(client_id);
   if (!client || !client.redirect_uris.includes(redirect_uri)) {
@@ -45,10 +61,13 @@ async function approve(formData: FormData) {
   const code = await createCode({
     client_id,
     redirect_uri,
-    user_id: user!.id,
+    user_id: identity!.id,
     code_challenge,
     scope,
   });
+
+  // One-shot: drop the handoff cookie now that it's been spent.
+  (await cookies()).delete("mcp_handoff");
 
   const u = new URL(redirect_uri);
   u.searchParams.set("code", code);
@@ -74,8 +93,8 @@ export default async function ConsentPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const user = await getUser();
-  if (!user) {
+  const identity = await resolveIdentity();
+  if (!identity) {
     const next = `/oauth/consent?${new URLSearchParams(sp as Record<string, string>).toString()}`;
     redirect(`/oauth/login?next=${encodeURIComponent(next)}`);
   }
@@ -104,7 +123,7 @@ export default async function ConsentPage({
         </p>
 
         <div className="mt-5 rounded-[12px] border border-[rgba(252,252,253,0.06)] bg-[rgba(252,252,253,0.03)] p-4 text-[12px]">
-          <Row label="Signed in as" value={user!.email ?? user!.id} />
+          <Row label="Signed in as" value={identity!.email || identity!.id} />
           <Row label="Scope" value={sp.scope || "mcp:read mcp:write"} />
           <Row label="Redirect" value={sp.redirect_uri ?? "—"} />
         </div>

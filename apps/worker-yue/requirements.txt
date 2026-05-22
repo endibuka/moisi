@@ -19,3 +19,7 @@ einops
 omegaconf
 safetensors
 soundfile
+# YuE's xcodec utils import `torch.utils.tensorboard`, which requires the
+# standalone tensorboard package (absent from the pytorch base image). Without
+# it inference dies at import: ModuleNotFoundError: No module named 'tensorboard'.
+tensorboard

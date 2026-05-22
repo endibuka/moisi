@@ -34,6 +34,8 @@ export default async function DashboardLayout({
     supabase
       .from("separation_jobs")
       .select("id, original_name, status, cover_art_path")
+      // Sidebar's Library list sits under Track Separation — exclude songs.
+      .neq("job_type", "music_generation")
       .order("created_at", { ascending: false })
       .limit(5),
     queryClient.prefetchQuery({
