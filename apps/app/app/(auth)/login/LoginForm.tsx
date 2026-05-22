@@ -10,8 +10,10 @@ import { login } from "../actions";
 
 export default function LoginForm({
   initialError,
+  next,
 }: {
   initialError?: string;
+  next?: string;
 }) {
   const [state, formAction] = useActionState(
     login,
@@ -33,6 +35,7 @@ export default function LoginForm({
 
       {showEmail ? (
         <form action={formAction} className="flex flex-col gap-4">
+          {next && <input type="hidden" name="next" value={next} />}
           <Field
             label="Email"
             name="email"

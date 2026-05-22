@@ -75,6 +75,18 @@ export function getGeminiKey(): string {
   return key;
 }
 
+/**
+ * Shared HMAC secret for the dashboard → MCP identity handoff. Must match
+ * MCP_HANDOFF_SECRET on the main app. In dev a deterministic fallback is used
+ * so a local dashboard and MCP server trust each other without configuration.
+ */
+export function getHandoffSecret(): string {
+  return (
+    process.env.MCP_HANDOFF_SECRET ||
+    "dev-only-mcp-handoff-secret-do-not-use-in-production-please"
+  );
+}
+
 export function getAppOrigin(): string {
   // Where /oauth/authorize sends the user when they need to log in. Default
   // is the local main Next app; in prod set MOISI_APP_ORIGIN to the deployed

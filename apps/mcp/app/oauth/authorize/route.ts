@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getClient } from "@/lib/oauth-store";
-import { getIssuer } from "@/lib/env";
+import { getAppOrigin, getIssuer } from "@/lib/env";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 /**
@@ -56,11 +56,16 @@ export async function GET(request: NextRequest) {
   const origin = getIssuer();
 
   if (!user) {
-    // Bounce to our own login page; it'll come back here with the same query.
-    const next = `${request.nextUrl.pathname}?${sp.toString()}`;
-    const login = new URL("/oauth/login", origin);
-    login.searchParams.set("next", next);
-    return NextResponse.redirect(login);
+    // No MCP-origin session. Rather than ask for credentials again, hand off to
+    // the dashboard — where the user is already signed in — for a signed
+    // identity proof. The dashboard returns to /oauth/handoff with a token we
+    // trust, which then drops the user straight onto the consent screen.
+    const resume = new URL("/oauth/handoff", origin);
+    sp.forEach((v, k) => resume.searchParams.set(k, v));
+    resume.searchParams.set("scope", scope);
+    const handoff = new URL("/api/mcp/handoff", getAppOrigin());
+    handoff.searchParams.set("return", resume.toString());
+    return NextResponse.redirect(handoff);
   }
 
   // Logged in — go to the consent page which finalises the code grant.

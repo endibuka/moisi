@@ -63,6 +63,27 @@ export default function TrackMixer({
   const [solo, setSolo] = useState<StemName | null>(null);
   const [ready, setReady] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  // Close the export menu on outside click / Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     const ctx = new AudioContext();
@@ -296,6 +317,74 @@ export default function TrackMixer({
     }
   };
 
+  // Render the whole track down to a single WAV, applying the current mixer
+  // state (volume, pan, mute, solo) per stem. Decoding + summing happens in an
+  // OfflineAudioContext so it renders faster than realtime and stays exact.
+  const exportMix = async () => {
+    setExporting(true);
+    setMenuOpen(false);
+    try {
+      const baseName = job.original_name.replace(/\.[^.]+$/, "");
+      const decodeCtx = new AudioContext();
+      const buffers = await Promise.all(
+        stems.map(async (name) => {
+          const url = stemUrls[name];
+          if (!url) return null;
+          const arr = await fetch(url).then((r) => r.arrayBuffer());
+          const buf = await decodeCtx.decodeAudioData(arr);
+          return { name, buf };
+        }),
+      );
+      await decodeCtx.close();
+
+      const present = buffers.filter(
+        (b): b is { name: StemName; buf: AudioBuffer } => b !== null,
+      );
+      if (present.length === 0) return;
+
+      const sampleRate = present[0].buf.sampleRate;
+      const length = Math.max(...present.map((b) => b.buf.length));
+      const offline = new OfflineAudioContext(2, length, sampleRate);
+
+      for (const { name, buf } of present) {
+        const silenced = muted.has(name) || (solo !== null && solo !== name);
+        const src = offline.createBufferSource();
+        src.buffer = buf;
+        const gain = offline.createGain();
+        gain.gain.value = silenced ? 0 : volumes[name] ?? 1;
+        const panner = offline.createStereoPanner();
+        panner.pan.value = pans[name] ?? 0;
+        src.connect(gain).connect(panner).connect(offline.destination);
+        src.start();
+      }
+
+      const rendered = await offline.startRendering();
+      const blob = new Blob([audioBufferToWav(rendered)], { type: "audio/wav" });
+      const dlUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = dlUrl;
+      a.download = `${baseName} (mix).wav`;
+      a.click();
+      URL.revokeObjectURL(dlUrl);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const downloadStem = async (name: StemName) => {
+    const url = stemUrls[name];
+    if (!url) return;
+    setMenuOpen(false);
+    const baseName = job.original_name.replace(/\.[^.]+$/, "");
+    const blob = await fetch(url).then((r) => r.blob());
+    const dlUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = dlUrl;
+    a.download = `${baseName} - ${STEM_LABELS[name]}.mp3`;
+    a.click();
+    URL.revokeObjectURL(dlUrl);
+  };
+
   const toggleMute = (name: StemName) =>
     setMuted((prev) => {
       const next = new Set(prev);
@@ -355,17 +444,50 @@ export default function TrackMixer({
           <Caret />
         </Chip>
 
-        <button
-          type="button"
-          onClick={exportZip}
-          disabled={exporting || !ready}
-          className="flex h-9 items-center gap-2 rounded-full bg-[#00dae8] px-4 text-[13px] font-medium text-[#001316] transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
-            <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-          </svg>
-          {exporting ? "Exporting…" : "Export"}
-        </button>
+        <div ref={exportRef} className="relative">
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+            disabled={exporting || !ready}
+            className="flex h-9 items-center gap-2 rounded-full bg-[#00dae8] px-4 text-[13px] font-medium text-[#001316] transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+              <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+            {exporting ? "Exporting…" : "Export"}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 opacity-70">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {menuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-[10px] border border-[#212225] bg-[#1a1b1e] py-1 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.5)]"
+            >
+              <ExportMenuItem
+                onClick={() => void exportMix()}
+                label="Whole mix (.wav)"
+              />
+              <ExportMenuItem
+                onClick={() => {
+                  setMenuOpen(false);
+                  void exportZip();
+                }}
+                label="All stems (.zip)"
+              />
+              <div className="my-1 h-px bg-[rgba(252,253,255,0.06)]" />
+              {stems.map((name) => (
+                <ExportMenuItem
+                  key={name}
+                  onClick={() => void downloadStem(name)}
+                  label={STEM_LABELS[name]}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </header>
 
       {/* mixer body */}
@@ -481,7 +603,73 @@ export default function TrackMixer({
   );
 }
 
+/**
+ * Encode an AudioBuffer to a 16-bit PCM WAV. Channels are interleaved and
+ * samples clamped to [-1, 1] before quantising. No dependency — the mixdown
+ * stays fully in-browser.
+ */
+function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const numFrames = buffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = numChannels * bytesPerSample;
+  const dataSize = numFrames * blockAlign;
+  const arr = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(arr);
+
+  const writeString = (offset: number, s: string) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 8 * bytesPerSample, true);
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < numChannels; c++) channels.push(buffer.getChannelData(c));
+
+  let offset = 44;
+  for (let i = 0; i < numFrames; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      const sample = Math.max(-1, Math.min(1, channels[c][i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      offset += 2;
+    }
+  }
+  return arr;
+}
+
 /* ---------- subcomponents ---------- */
+
+function ExportMenuItem({
+  onClick,
+  label,
+}: {
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-center px-3 py-1.5 text-left text-[13px] text-[rgba(241,247,254,0.85)] transition-colors hover:bg-[rgba(221,234,248,0.06)] hover:text-white"
+    >
+      {label}
+    </button>
+  );
+}
 
 function StemRow({
   name,

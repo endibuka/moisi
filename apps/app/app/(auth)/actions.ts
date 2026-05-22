@@ -38,7 +38,10 @@ export async function login(
     return { error: "Invalid email or password." };
   }
 
-  redirect("/");
+  // Honour a same-origin `next` (e.g. the MCP identity handoff); ignore
+  // anything that isn't a local path so it can't be used to redirect off-site.
+  const next = String(formData.get("next") ?? "");
+  redirect(next.startsWith("/") ? next : "/");
 }
 
 export async function signup(

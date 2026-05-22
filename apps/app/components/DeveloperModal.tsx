@@ -17,7 +17,7 @@ import { ScrollArea } from "./ui/scroll-area";
 
 // Public Mintlify deployment of `/docs`. Centralised so a future custom
 // domain swap is a one-line change.
-const DOCS_BASE = "https://muse-6955b459.mintlify.app";
+const DOCS_BASE = "https://muse-6a6f1448.mintlify.app";
 
 type DevLink = {
   title: string;
@@ -45,21 +45,21 @@ const DEV_LINKS: DevLink[] = [
     title: "Separations",
     description:
       "Run the full 7-stem pipeline or the 2-stem vocal-isolation fast path. Includes get + list.",
-    href: `${DOCS_BASE}/endpoints/separations/create`,
+    href: `${DOCS_BASE}/api/separations/create`,
     Icon: Waveform,
   },
   {
     title: "Music generation",
     description:
       "Generate songs from a style prompt plus optional lyrics. Returns a single mixed track.",
-    href: `${DOCS_BASE}/endpoints/songs/create`,
+    href: `${DOCS_BASE}/api/songs/create`,
     Icon: MusicNotes,
   },
   {
     title: "Cover art",
     description:
       "Spotify-style 1:1 album covers via Gemini. Attach to any of your existing jobs.",
-    href: `${DOCS_BASE}/endpoints/cover-art/create`,
+    href: `${DOCS_BASE}/api/cover-art/create`,
     Icon: Image,
   },
   {

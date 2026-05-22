@@ -15,6 +15,9 @@ export default async function Library() {
       .select(
         "id,status,original_name,input_path,stems,error,created_at,duration_seconds,cover_art_path",
       )
+      // Track Separation library shows separation + vocal-isolation jobs only.
+      // Music-generation songs live in the Music Generator tool, not here.
+      .neq("job_type", "music_generation")
       .order("created_at", { ascending: false }),
   ]);
 
